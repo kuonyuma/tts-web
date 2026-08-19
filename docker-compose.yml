@@ -1,0 +1,12 @@
+services:
+  tts-web:
+    build: .
+    container_name: tts-web
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - edge_tts_max_concurrency=3
+      - gemini_api_key=
+    volumes:
+      - ./backend/app/cache:/app/backend/app/cache

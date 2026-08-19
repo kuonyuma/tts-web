@@ -1,0 +1,40 @@
+# Version Control
+.git
+.gitignore
+
+# Python & Virtual Environments
+__pycache__
+*.py[cod]
+*$py.class
+.venv
+venv
+env
+
+# Tests & Cache
+.pytest_cache
+.coverage
+htmlcov
+.ruff_cache
+.mypy_cache
+
+# Application Runtime Data & Caches
+backend/app/cache
+**/cache
+*.db
+*.mp3
+*.wav
+
+# Local Configurations & Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# IDEs & System Files
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+README.md
+README_zh.md
+DEVELOPMENT.md
