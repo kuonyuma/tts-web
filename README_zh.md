@@ -106,7 +106,7 @@ http://localhost:8000
 
 #### 1. 克隆代码仓库
 ```bash
-git clone https://github.com/your-username/tts-web.git
+git clone https://github.com/kuonyuma/tts-web.git
 cd tts-web
 ```
 
