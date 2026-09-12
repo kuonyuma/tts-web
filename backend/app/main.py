@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.tts import router as tts_router
+from app.api.explain import router as explain_router
 from app.api.history import router as history_router
 from app.services.history_service import init_db
 
@@ -49,6 +50,7 @@ async def health_check():
 
 # Register API routes
 app.include_router(tts_router)
+app.include_router(explain_router)
 app.include_router(history_router)
 
 # Mount frontend static files
