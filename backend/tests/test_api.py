@@ -247,3 +247,90 @@ def test_history_multi_client_isolation():
     # Client B still has their record
     res_b_final = client.get("/api/history", headers={"X-Client-ID": client_b})
     assert len(res_b_final.json()) == 1
+
+
+@patch("app.api.tts.add_or_touch")
+@patch("app.api.tts.put_flow_cache")
+@patch("app.api.tts.get_cached_flow", return_value=None)
+@patch("app.api.tts.synthesize_with_timeline", new_callable=AsyncMock)
+def test_tts_flow_edge_success(mock_synthesize, mock_cache_get, mock_cache_put, mock_history):
+    """Verify POST /api/tts/flow returns manifest JSON with sentences."""
+    from app.services.engines.base import SentenceCue, TimedSynthesisResult
+
+    fake_result = TimedSynthesisResult(
+        audio_bytes=b"fake-flow-audio",
+        sentences=[
+            SentenceCue(text="今日はいい天気です。", start_ms=100, end_ms=1640),
+            SentenceCue(text="散歩に行きましょう！", start_ms=1640, end_ms=3420),
+        ]
+    )
+    mock_synthesize.return_value = fake_result
+
+    response = client.post(
+        "/api/tts/flow",
+        json={
+            "text": "今日はいい天気です。散歩に行きましょう！",
+            "engine": "edge",
+            "voice": "ja-JP-NanamiNeural",
+        },
+        headers={"X-Client-ID": "flow-client-1"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["version"] == 1
+    assert data["engine"] == "edge"
+    assert data["cached"] is False
+    assert data["timeline_available"] is True
+    assert data["audio_url"].startswith("/api/tts/")
+    assert len(data["sentences"]) == 2
+    assert data["sentences"][0] == {
+        "index": 0,
+        "text": "今日はいい天気です。",
+        "start_ms": 100,
+        "end_ms": 1640,
+    }
+    assert data["sentences"][1]["index"] == 1
+    mock_history.assert_called_once()
+
+
+def test_tts_flow_gemini_unsupported_422():
+    """Verify POST /api/tts/flow rejects engines without timeline support with 422."""
+    response = client.post(
+        "/api/tts/flow",
+        json={
+            "text": "こんにちは",
+            "engine": "gemini",
+        }
+    )
+    assert response.status_code == 422
+    assert "暂不支持句子时间轴" in response.json()["detail"]
+
+
+@patch("app.api.tts.touch")
+@patch("app.api.tts.get_cached_flow")
+def test_tts_flow_get_manifest(mock_get_cached_flow, mock_touch):
+    """Verify GET /api/tts/flow/{cache_key} returns cached timeline."""
+    fake_timeline = {
+        "version": 1,
+        "engine": "edge",
+        "voice": "ja-JP-NanamiNeural",
+        "audio_sha256": "abc",
+        "sentences": [{"index": 0, "text": "テスト", "start_ms": 0, "end_ms": 500}],
+    }
+    mock_get_cached_flow.return_value = (b"fake-audio", fake_timeline)
+
+    response = client.get("/api/tts/flow/test_key_123", headers={"X-Client-ID": "test-c"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cache_key"] == "test_key_123"
+    assert data["cached"] is True
+    assert data["timeline_available"] is True
+    assert len(data["sentences"]) == 1
+    mock_touch.assert_called_once_with("test-c", "test_key_123")
+
+
+def test_tts_flow_get_manifest_not_found():
+    """Verify GET /api/tts/flow/{cache_key} returns 404 on cache miss."""
+    response = client.get("/api/tts/flow/nonexistent_key_999")
+    assert response.status_code == 404
+

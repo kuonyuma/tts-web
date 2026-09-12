@@ -18,6 +18,7 @@ class Settings:
         or os.getenv("TTS_API_KEY", "")
     )
     GEMINI_TTS_MODEL: str = os.getenv("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
+    GEMINI_TEXT_MODEL: str = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.8-flash")
     GEMINI_TTS_VOICE: str = os.getenv("GEMINI_TTS_VOICE", "Kore")
     MAX_TEXT_LENGTH: int = int(os.getenv("MAX_TEXT_LENGTH", "1000"))
     MIN_TEXT_LENGTH: int = int(os.getenv("MIN_TEXT_LENGTH", "1"))

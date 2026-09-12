@@ -2,7 +2,7 @@ import asyncio
 import logging
 import edge_tts
 from app.config import settings
-from app.services.engines.base import BaseTTSEngine, VoiceInfo
+from app.services.engines.base import BaseTTSEngine, VoiceInfo, SentenceCue, TimedSynthesisResult
 
 logger = logging.getLogger(__name__)
 
@@ -79,15 +79,18 @@ class EdgeTTSEngine(BaseTTSEngine):
     def default_voice(self) -> str:
         return "ja-JP-NanamiNeural"
 
+    @property
+    def supports_sentence_timeline(self) -> bool:
+        return True
+
     def get_voices(self) -> list[VoiceInfo]:
         return SUPPORTED_VOICES
 
-    async def synthesize(
+    async def _synthesize_stream(
         self,
         text: str,
         voice: str | None = None,
-        api_key: str | None = None,
-    ) -> bytes:
+    ) -> TimedSynthesisResult:
         selected_voice = voice or self.default_voice
         if not any(v["id"] == selected_voice for v in SUPPORTED_VOICES):
             selected_voice = self.default_voice
@@ -96,17 +99,72 @@ class EdgeTTSEngine(BaseTTSEngine):
         semaphore = self._get_semaphore()
         async with semaphore:
             try:
-                communicate = edge_tts.Communicate(text, selected_voice)
+                communicate = edge_tts.Communicate(
+                    text,
+                    selected_voice,
+                    boundary="SentenceBoundary",
+                )
                 chunks: list[bytes] = []
+                raw_boundaries: list[dict] = []
+
                 async for chunk in communicate.stream():
                     if chunk["type"] == "audio":
                         chunks.append(chunk["data"])
+                    elif chunk["type"] == "SentenceBoundary":
+                        raw_boundaries.append(chunk)
 
                 if not chunks:
                     raise RuntimeError("Edge TTS returned empty audio stream.")
 
-                return b"".join(chunks)
+                audio_bytes = b"".join(chunks)
+
+                # Validate and parse sentence boundaries
+                sentences: list[SentenceCue] = []
+                last_start_ms = -1
+                for item in raw_boundaries:
+                    raw_text = item.get("text", "")
+                    cue_text = raw_text.strip() if isinstance(raw_text, str) else ""
+                    if not cue_text:
+                        continue
+                    try:
+                        offset = int(item["offset"])
+                        duration = int(item["duration"])
+                    except (KeyError, ValueError, TypeError):
+                        continue
+
+                    start_ms = offset // 10_000
+                    end_ms = (offset + duration) // 10_000
+
+                    if start_ms < 0 or end_ms < start_ms:
+                        continue
+                    if start_ms < last_start_ms:
+                        continue
+
+                    last_start_ms = start_ms
+                    sentences.append(SentenceCue(text=cue_text, start_ms=start_ms, end_ms=end_ms))
+
+                if not sentences:
+                    logger.warning("Edge TTS returned no valid SentenceBoundary events for text length=%d", len(text))
+
+                return TimedSynthesisResult(audio_bytes=audio_bytes, sentences=sentences)
 
             except Exception as exc:
                 logger.exception("Edge TTS synthesis failed: %s", type(exc).__name__)
                 raise RuntimeError(f"Edge TTS synthesis error: {exc}") from exc
+
+    async def synthesize(
+        self,
+        text: str,
+        voice: str | None = None,
+        api_key: str | None = None,
+    ) -> bytes:
+        result = await self._synthesize_stream(text, voice=voice)
+        return result.audio_bytes
+
+    async def synthesize_with_timeline(
+        self,
+        text: str,
+        voice: str | None = None,
+        api_key: str | None = None,
+    ) -> TimedSynthesisResult:
+        return await self._synthesize_stream(text, voice=voice)

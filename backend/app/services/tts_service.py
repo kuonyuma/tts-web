@@ -10,6 +10,7 @@ from app.services.engines import (
     TTSTimeoutError,
     TTSUpstreamError,
 )
+from app.services.engines.base import SentenceCue, TimedSynthesisResult
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,36 @@ async def synthesize(
     return await tts_engine.synthesize(text, voice=voice, api_key=api_key)
 
 
+async def synthesize_with_timeline(
+    text: str,
+    voice: str | None = None,
+    engine: str = DEFAULT_ENGINE_ID,
+    api_key: str | None = None,
+) -> TimedSynthesisResult:
+    """
+    Synthesizes speech and returns both audio bytes and sentence timestamps.
+
+    :param text: Japanese input text
+    :param voice: Voice identifier
+    :param engine: Engine identifier ('edge', 'gemini')
+    :param api_key: Custom API Key for BYOK engines
+    :return: TimedSynthesisResult containing MP3 audio bytes and list of SentenceCue
+    """
+    tts_engine = get_engine(engine)
+    if not tts_engine.supports_sentence_timeline:
+        raise TTSConfigError(f"当前语音引擎 '{engine}' 暂不支持句子同步。")
+    return await tts_engine.synthesize_with_timeline(text, voice=voice, api_key=api_key)
+
+
 __all__ = [
     "synthesize",
+    "synthesize_with_timeline",
     "pcm_to_wav",
+    "SentenceCue",
+    "TimedSynthesisResult",
     "TTSException",
     "TTSConfigError",
     "TTSTimeoutError",
     "TTSUpstreamError",
 ]
+

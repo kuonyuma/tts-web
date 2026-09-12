@@ -1,5 +1,19 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TypedDict
+
+
+@dataclass(frozen=True)
+class SentenceCue:
+    text: str
+    start_ms: int
+    end_ms: int
+
+
+@dataclass(frozen=True)
+class TimedSynthesisResult:
+    audio_bytes: bytes
+    sentences: list[SentenceCue]
 
 
 class VoiceInfo(TypedDict):
@@ -42,6 +56,11 @@ class BaseTTSEngine(ABC):
         """Default voice identifier."""
         pass
 
+    @property
+    def supports_sentence_timeline(self) -> bool:
+        """Whether this engine supports generating sentence-level timestamps."""
+        return False
+
     @abstractmethod
     async def synthesize(
         self,
@@ -59,7 +78,20 @@ class BaseTTSEngine(ABC):
         """
         pass
 
+    async def synthesize_with_timeline(
+        self,
+        text: str,
+        voice: str | None = None,
+        api_key: str | None = None,
+    ) -> TimedSynthesisResult:
+        """
+        Synthesize speech and return both MP3 audio bytes and sentence timestamps.
+        Must be implemented by engines declaring supports_sentence_timeline=True.
+        """
+        raise NotImplementedError(f"Engine '{self.engine_id}' does not support sentence timeline.")
+
     @abstractmethod
     def get_voices(self) -> list[VoiceInfo]:
         """Return list of supported voice models with metadata."""
         pass
+

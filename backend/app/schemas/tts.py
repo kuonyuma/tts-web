@@ -68,3 +68,23 @@ class HistoryItem(BaseModel):
     cache_key: str
     created_at: str
     last_played_at: str
+
+
+class SentenceCueResponse(BaseModel):
+    index: int
+    text: str
+    start_ms: int
+    end_ms: int
+
+
+class TTSFlowResponse(BaseModel):
+    version: int = 1
+    cache_key: str
+    audio_url: str
+    media_type: str = "audio/mpeg"
+    engine: str
+    voice: str
+    cached: bool
+    timeline_available: bool
+    sentences: list[SentenceCueResponse]
+

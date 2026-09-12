@@ -1,88 +1,89 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TTS Web - 音声合成</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>TTS Web - 日语语音工作室</title>
+  <link rel="stylesheet" href="style.css?v=20260907-layout-fit" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div class="app-layout">
+  <button id="historyBtn" class="history-toggle" type="button" aria-label="展开历史侧栏" aria-controls="historySection" aria-expanded="false" title="展开历史侧栏">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="3"></rect>
+      <path d="M9 4v16"></path>
+    </svg>
+    <span id="headerHistoryBadge" class="header-history-badge">0</span>
+  </button>
     <!-- Main Content Area -->
     <div class="main-area">
-      <header class="app-header">
-        <div class="header-left">
-          <div class="header-main">
-            <h1 class="app-title">TTS Web</h1>
-            <span class="header-tag">AI 音声合成</span>
-          </div>
-          <p class="app-subtitle">テキストを入力して、自然でクリアな音声を合成・再生します</p>
-        </div>
-        <button id="sidebarToggleBtn" class="sidebar-toggle-btn" type="button" aria-label="再生履歴を表示" title="再生履歴">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-          <span class="toggle-text">履歴</span>
-          <span id="mobileHistoryBadge" class="mobile-history-badge">0</span>
-        </button>
-      </header>
 
-      <main class="main-card">
+      <div class="workspace shared-workspace">
+        <div class="ambient-fields" aria-hidden="true">
+          <span class="ambient-field ambient-field-left"></span>
+          <span class="ambient-field ambient-field-right"></span>
+        </div>
+        <span class="workspace-seam" aria-hidden="true"></span>
+        <section class="work-left" aria-label="语音生成工作区">
         <!-- Engine & Voice Control Bar -->
         <div class="control-bar">
           <div class="control-group">
-            <label for="engineSelect" class="control-label">TTS エンジン</label>
+            <div class="control-label-row">
+              <label for="engineSelect" class="control-label">语音引擎</label>
+              <span id="engineBadge" class="control-badge">免费</span>
+            </div>
             <div class="select-wrapper">
               <select id="engineSelect" class="control-select">
-                <option value="edge">Edge TTS (無料・高速)</option>
-                <option value="gemini">Gemini TTS (高品質・BYOK)</option>
+                <option value="edge">Edge TTS（免费·快速）</option>
+                <option value="gemini">Gemini TTS（高品质·需 Key）</option>
               </select>
             </div>
           </div>
 
           <div class="control-group voice-group">
-            <label for="voiceSelect" class="control-label">話者・声色</label>
+            <div class="control-label-row">
+              <label for="voiceSelect" class="control-label">声音选择</label>
+            </div>
             <div class="select-wrapper">
               <select id="voiceSelect" class="control-select">
                 <!-- Dynamically populated -->
               </select>
             </div>
           </div>
-
-          <div class="control-actions">
-            <button id="settingsBtn" class="settings-btn" type="button" aria-label="API Key 設定 (BYOK)" title="API Key 設定 (BYOK)">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-              </svg>
-              <span class="settings-btn-text">API Key 設定</span>
-              <span id="keyStatusBadge" class="key-status-dot" title="Key 設定済み" style="display: none;"></span>
-            </button>
-          </div>
         </div>
 
         <div class="editor-section">
           <div class="editor-top-bar">
-            <label for="textInput" class="editor-label">入力テキスト</label>
+            <label for="textInput" class="editor-label">输入文本</label>
+            <span id="syncStatus" class="sync-status is-idle">
+              <span class="sync-status-dot" aria-hidden="true"></span>
+              等待一句话
+            </span>
+          </div>
+
+          <div class="sample-prompts" aria-label="示例文本">
+            <span class="sample-prompts-label">试试：</span>
+            <button class="sample-chip" type="button" data-sample="こんにちは。今日も良い一日をお過ごしください。">日常问候</button>
+            <button class="sample-chip" type="button" data-sample="東京へようこそ。ゆっくりと街の景色を楽しんでください。">旅行场景</button>
+            <button class="sample-chip" type="button" data-sample="え、本当に？すごい！それはとても嬉しいニュースですね。">情绪练习</button>
           </div>
 
           <textarea
             id="textInput"
             class="text-input"
-            placeholder="読み上げたいテキストを入力してください。&#10;例：こんにちは。今日も良い一日をお過ごしください。&#10;Hello! Welcome to TTS Web."
+            placeholder="输入想要朗读的文本。&#10;例如：こんにちは。今日も良い一日をお過ごしください。&#10;你也可以输入中文或英文进行试听。"
             maxlength="1000"
             rows="7"
             spellcheck="false"
           ></textarea>
-          
+
           <div class="editor-bottom-bar">
             <div class="editor-meta">
               <span id="charCounter" class="char-counter">0 / 1000 字</span>
-              <span class="shortcut-hint">Ctrl + Enter で生成</span>
+              <span class="shortcut-hint">Ctrl + Enter 生成</span>
             </div>
 
             <div class="editor-actions">
@@ -90,8 +91,10 @@
                 <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
-                <span class="btn-spinner" id="btnSpinner" aria-hidden="true"></span>
-                <span class="btn-text" id="btnText">音声を生成</span>
+                <span class="btn-voice-wave" id="btnVoiceWave" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span>
+                </span>
+                <span class="btn-text" id="btnText">生成语音</span>
               </button>
             </div>
           </div>
@@ -104,14 +107,19 @@
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
           <span id="errorMessage" class="error-message"></span>
-          <button id="errorCloseBtn" class="error-close-btn" type="button" aria-label="閉じる">×</button>
+          <button id="errorCloseBtn" class="error-close-btn" type="button" aria-label="关闭提示">×</button>
         </div>
+
+        <!-- Sentence Flow Display (One sentence per line + synchronized highlight) -->
+        <section id="sentenceFlow" class="sentence-flow" hidden>
+          <div id="sentenceList" class="sentence-list" role="region" aria-label="句子朗读列表"></div>
+        </section>
 
         <!-- Custom Audio Player -->
         <div class="player-wrapper" id="playerContainer" style="display: none;">
           <audio id="audioPlayer" preload="auto"></audio>
           <div class="custom-player">
-            <button id="playPauseBtn" class="player-btn play-toggle-btn" type="button" aria-label="再生 / 一时停止" title="再生 / 一时停止">
+            <button id="playPauseBtn" class="player-btn play-toggle-btn" type="button" aria-label="播放 / 暂停" title="播放 / 暂停">
               <svg class="icon-play" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
@@ -123,32 +131,19 @@
 
             <span id="currentTime" class="player-time">00:00</span>
 
-            <div class="progress-container">
-              <input type="range" id="progressBar" class="progress-slider" min="0" max="100" value="0" step="0.1" aria-label="再生位置" />
+            <div class="waveform-container" id="waveformContainer" role="slider" aria-label="播放进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+              <div class="waveform-bars" id="waveformBars"></div>
+              <div class="waveform-hover-line" id="waveformHoverLine"></div>
+              <div class="waveform-tooltip" id="waveformTooltip">00:00</div>
             </div>
 
             <span id="totalDuration" class="player-time">00:00</span>
 
-            <button id="speedBtn" class="player-btn speed-btn" type="button" aria-label="再生速度" title="再生速度の変更">
+            <button id="speedBtn" class="player-btn speed-btn" type="button" aria-label="播放速度" title="切换播放速度">
               1.0x
             </button>
 
-            <div class="volume-container">
-              <button id="volumeBtn" class="player-btn volume-toggle-btn" type="button" aria-label="消音切替" title="消音切替">
-                <svg class="icon-volume-high" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                </svg>
-                <svg class="icon-volume-muted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                  <line x1="23" y1="9" x2="17" y2="15"></line>
-                  <line x1="17" y1="9" x2="23" y2="15"></line>
-                </svg>
-              </button>
-              <input type="range" id="volumeBar" class="volume-slider" min="0" max="1" step="0.05" value="1" aria-label="音量調節" />
-            </div>
-
-            <button id="downloadBtn" class="player-btn download-btn" type="button" aria-label="音声をダウンロード" title="音声をダウンロード (MP3)">
+            <button id="downloadBtn" class="player-btn download-btn" type="button" aria-label="下载音频" title="下载音频（MP3）">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
@@ -157,35 +152,107 @@
             </button>
           </div>
         </div>
-      </main>
+        </section>
 
-      <footer class="app-footer">
-        <p>TTS Web • Multi-Engine Text-to-Speech Web Application</p>
-      </footer>
+        <!-- AI Explanation Panel -->
+        <section class="work-right explain-section" id="explainSection" aria-label="AI Reading Copilot">
+          <div class="explain-header">
+            <div class="explain-heading-row">
+            <div class="explain-title-group">
+              <span class="explain-spark" aria-hidden="true">✦</span>
+              <span class="explain-title">AI Reading Copilot</span>
+              <span id="explainLangBadge" class="explain-lang-badge">中文</span>
+            </div>
+          <button id="settingsBtn" class="header-btn" type="button" aria-label="打开设置" title="设置">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span class="settings-btn-text">设置</span>
+            <span id="keyStatusBadge" class="key-status-dot" title="API Key 已设置" style="display: none;"></span>
+          </button>
+            </div>
+            <div class="explain-controls">
+              <label class="explain-toggle" title="AI 解说开关">
+                <input type="checkbox" id="explainToggle" checked />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                <span class="explain-toggle-text">AI 解说</span>
+              </label>
+              <select id="explainLangSelect" class="explain-lang-select" aria-label="解说语言" title="解说语言">
+                <option value="zh">中文解说</option>
+                <option value="ja">日语解说</option>
+                <option value="en">英文解说</option>
+              </select>
+              <select id="explainThinkingSelect" class="explain-lang-select" aria-label="解说深度" title="解说深度">
+                <option value="low">简洁</option>
+                <option value="medium">标准</option>
+                <option value="high">深入</option>
+              </select>
+              <button id="explainRetryBtn" class="explain-retry-btn" type="button" title="重新生成当前句子的解说">重新解说</button>
+            </div>
+          </div>
+          <div
+            class="explain-sync-strip"
+            id="explainSyncStrip"
+            title="右侧会针对这段文本生成翻译、语法和词汇分析"
+          >
+            <span class="explain-sync-icon" aria-hidden="true">↔</span>
+            <div class="explain-sync-copy">
+              <span class="explain-sync-label">讲解对象 · 跟随左侧输入</span>
+              <span id="explainCurrentText" class="explain-current-text">等待输入文本</span>
+            </div>
+            <span id="explainSyncStatus" class="explain-sync-status">等待输入</span>
+          </div>
+          <div class="explain-messages" id="explainMessages"></div>
+          <div class="explain-input-row">
+            <input
+              type="text"
+              id="explainChatInput"
+              class="explain-chat-input"
+              placeholder="继续提问这句话…（Enter 发送）"
+              maxlength="500"
+              autocomplete="off"
+            />
+            <button id="explainSendBtn" class="explain-send-btn" type="button">发送</button>
+          </div>
+        </section>
+      </div>
     </div>
 
     <!-- History Sidebar -->
-    <aside class="history-sidebar" id="historySection" style="display: none;">
+    <aside class="history-sidebar" id="historySection" aria-label="播放历史" aria-hidden="true" inert>
+      <header class="sidebar-brand">
+        <div class="header-left">
+          <div class="header-main">
+            <span class="brand-orb" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </span>
+            <h1 class="app-title">TTS Web</h1>
+            <span class="header-tag">日语语音工作室</span>
+          </div>
+          <p class="app-subtitle">写下一句话，让声音和理解一起发生</p>
+        </div>
+      </header>
       <div class="sidebar-header">
         <div class="sidebar-title-group">
           <svg class="history-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 16 14"></polyline>
           </svg>
-          <h2 class="sidebar-title">再生履歴</h2>
+          <h2 class="sidebar-title">播放历史</h2>
           <span id="historyBadge" class="history-badge">0</span>
         </div>
         <div class="sidebar-actions">
-          <button id="clearHistoryBtn" class="clear-history-btn" type="button" aria-label="すべての履歴を削除" title="すべての履歴を削除">
-            すべて削除
+          <button id="clearHistoryBtn" class="clear-history-btn" type="button" aria-label="清空全部历史" title="清空全部历史">
+            清空全部
           </button>
-          <button id="sidebarCloseBtn" class="sidebar-close-btn" type="button" aria-label="閉じる">×</button>
+          <button id="sidebarCloseBtn" class="sidebar-close-btn" type="button" aria-label="收起历史侧栏" title="收起历史侧栏">‹</button>
         </div>
       </div>
 
       <div class="sidebar-scrollable">
         <ul class="history-list" id="historyList"></ul>
-        <p class="history-empty" id="historyEmpty" style="display: none;">履歴はありません</p>
+        <p class="history-empty" id="historyEmpty" style="display: none;">还没有播放记录<br /><span>生成一段语音后，它会出现在这里</span></p>
       </div>
     </aside>
 
@@ -201,15 +268,15 @@
               <circle cx="12" cy="12" r="3"></circle>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
-            <h3 class="modal-title">API Key 設定 (BYOK)</h3>
+            <h3 class="modal-title">API Key 设置（BYOK）</h3>
           </div>
-          <button id="modalCloseBtn" class="modal-close-btn" type="button" aria-label="閉じる">×</button>
+          <button id="modalCloseBtn" class="modal-close-btn" type="button" aria-label="关闭">×</button>
         </div>
 
         <div class="modal-body">
           <p class="modal-desc">
-            <strong>Edge TTS</strong>（無料版）は API Key 不要で多言語の音声をすぐにご利用いただけます。<br />
-            <strong>Gemini 2.5 Flash TTS</strong>（高品質）を利用したい場合は、ご自身の Google Gemini API Key を設定してください。
+            <strong>Edge TTS</strong> 免费且无需 API Key，可以直接生成多语言语音。<br />
+            如果要使用高品质的 <strong>Gemini TTS</strong> 或 <strong>AI Reading Copilot</strong>，请配置你自己的 Google Gemini API Key。
           </p>
 
           <div class="form-field">
@@ -223,7 +290,7 @@
                 autocomplete="off"
                 spellcheck="false"
               />
-              <button id="toggleKeyVisibilityBtn" class="input-icon-btn" type="button" aria-label="表示切替" title="表示切替">
+              <button id="toggleKeyVisibilityBtn" class="input-icon-btn" type="button" aria-label="切换 Key 显示" title="切换显示">
                 <svg id="eyeIcon" class="icon-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                   <circle cx="12" cy="12" r="3"></circle>
@@ -239,21 +306,21 @@
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
             </svg>
-            <span>API Key はお使いのブラウザ (LocalStorage) にのみ安全に保存され、リクエスト時のみ暗号化通信で送信されます。サーバーのデータベースには保存されません。</span>
+            <span>API Key 只保存在你的浏览器 LocalStorage 中，仅在请求时通过加密连接发送，不会保存到服务器数据库。</span>
           </div>
         </div>
 
         <div class="modal-footer">
-          <button id="testKeyBtn" class="modal-btn modal-btn-secondary" type="button">接続テスト</button>
+          <button id="testKeyBtn" class="modal-btn modal-btn-secondary" type="button">测试连接</button>
           <div class="modal-footer-right">
-            <button id="clearKeyBtn" class="modal-btn modal-btn-danger" type="button">キーを削除</button>
-            <button id="saveKeyBtn" class="modal-btn modal-btn-primary" type="button">保存する</button>
+            <button id="clearKeyBtn" class="modal-btn modal-btn-danger" type="button">删除 Key</button>
+            <button id="saveKeyBtn" class="modal-btn modal-btn-primary" type="button">保存设置</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20260907-left-history"></script>
 </body>
 </html>
