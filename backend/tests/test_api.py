@@ -12,7 +12,7 @@ from app.services.tts_service import (
     pcm_to_wav,
 )
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Client-ID": "test-client"})
 
 
 def test_health_check():
@@ -319,18 +319,18 @@ def test_tts_flow_get_manifest(mock_get_cached_flow, mock_touch):
     }
     mock_get_cached_flow.return_value = (b"fake-audio", fake_timeline)
 
-    response = client.get("/api/tts/flow/test_key_123", headers={"X-Client-ID": "test-c"})
+    response = client.get("/api/tts/flow/0123456789abcdef", headers={"X-Client-ID": "test-c"})
     assert response.status_code == 200
     data = response.json()
-    assert data["cache_key"] == "test_key_123"
+    assert data["cache_key"] == "0123456789abcdef"
     assert data["cached"] is True
     assert data["timeline_available"] is True
     assert len(data["sentences"]) == 1
-    mock_touch.assert_called_once_with("test-c", "test_key_123")
+    mock_touch.assert_called_once_with("test-c", "0123456789abcdef")
 
 
 def test_tts_flow_get_manifest_not_found():
     """Verify GET /api/tts/flow/{cache_key} returns 404 on cache miss."""
-    response = client.get("/api/tts/flow/nonexistent_key_999")
+    response = client.get("/api/tts/flow/ffffffffffffffff")
     assert response.status_code == 404
 

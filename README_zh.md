@@ -63,7 +63,7 @@
 │  - app/api/tts.py: 引擎分发, Pydantic 校验, 缓存逻辑调度                │
 │  - app/api/history.py: 多租户隔离 SQLite 历史记录接口                   │
 │  - app/services/cache_service.py: L1 内存 LRU + L2 磁盘文件缓存         │
-│  - app/services/history_service.py: SQLite WAL 模式无锁持久化           │
+│  - app/services/history_service.py: SQLite WAL 模式持久化           │
 └──────────────────┬──────────────────────────────────┬───────────────────┘
                    │                                  │
                    ▼                                  ▼
@@ -72,11 +72,13 @@
 │ - 完全免费、免 API Key 即可使用      │ │ - Gemini 2.5 Flash Preview TTS │
 │ - asyncio.Semaphore 并发防风控保护   │ │ - Interactions API 异步调用    │
 │ - 输出: 直接返回 MP3 二进制流        │ │ - 输出: Base64 PCM 24kHz       │
-│ - 发音人: Nanami, Keita, Xiaoxiao... │ │ - pydub + ffmpeg -> MP3 128k   │
+│ - 发音人: Nanami, Keita, Xiaoxiao... │ │ - async ffmpeg -> MP3 128k   │
 └──────────────────────────────────────┘ └────────────────────────────────┘
 ```
 
 ---
+
+公开部署、容量限制及回滚步骤请先阅读 [稳定版部署说明](docs/STABLE_RELEASE.md)。
 
 ## 🚀 快速上手
 
@@ -112,11 +114,11 @@ cd tts-web
 
 #### 2. 同步安装依赖
 ```bash
-uv sync
+uv sync --frozen
 ```
 
 #### 3.（可选）配置环境变量
-如需在服务端配置默认的 Gemini API Key：
+如需使用服务端 Gemini Key，还必须按部署说明配置 SERVER_KEY_ACCESS_TOKEN：
 ```bash
 cp backend/.env.example backend/.env
 # 编辑 backend/.env 填入 GEMINI_API_KEY
@@ -139,10 +141,10 @@ API 交互式文档可访问 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/
 
 | 变量名 | 默认值 | 描述 |
 | :--- | :--- | :--- |
-| `GEMINI_API_KEY` | *(空)* | 可选。服务端默认 Gemini API Key（当请求未携带 BYOK 密钥时回退使用） |
+| `GEMINI_API_KEY` | *(空)* | 服务端 Gemini Key；仅在 X-Server-Key-Token 授权通过后使用 |
 | `EDGE_TTS_MAX_CONCURRENCY` | `3` | Edge TTS 最大并发请求数，防止出口 IP 触发风控限制 |
 | `MAX_TEXT_LENGTH` | `1000` | 单次语音合成支持的最大文本字符数限制 |
-| `CORS_ORIGINS` | `*` | 允许的 CORS 跨域源（多个以逗号分隔） |
+| `CORS_ORIGINS` | *(空；仅同源)* | 允许的 CORS 跨域源（多个以逗号分隔） |
 
 ---
 

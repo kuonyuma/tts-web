@@ -1,37 +1,14 @@
-import io
+import asyncio
 import base64
 import logging
-from google import genai
-from google.genai.errors import APIError
-from pydub import AudioSegment
 
 from app.config import settings
 from app.services.engines.base import BaseTTSEngine, VoiceInfo
+from app.services.errors import TTSException, TTSConfigError, TTSTimeoutError, TTSUpstreamError, provider_error
+from app.services.gemini_client import create_client, managed_client
+from app.services.runtime import request_deadline, upstream_slot
 
 logger = logging.getLogger(__name__)
-
-
-class TTSException(Exception):
-    """Base exception for TTS service errors."""
-    pass
-
-
-class TTSConfigError(TTSException):
-    """Raised when TTS configuration or credentials are missing."""
-    pass
-
-
-class TTSTimeoutError(TTSException):
-    """Raised when the TTS API request times out."""
-    pass
-
-
-class TTSUpstreamError(TTSException):
-    """Raised when the TTS upstream provider returns an error response."""
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(f"Upstream TTS error {status_code}: {detail}")
-        self.status_code = status_code
-        self.detail = detail
 
 
 SUPPORTED_VOICES: list[VoiceInfo] = [
@@ -86,29 +63,36 @@ SUPPORTED_VOICES: list[VoiceInfo] = [
 ]
 
 
-def pcm_to_mp3(
+async def pcm_to_mp3(
     pcm_data: bytes,
     sample_rate: int = 24000,
     channels: int = 1,
     sample_width: int = 2
 ) -> bytes:
-    """Converts raw PCM audio data to MP3 format using pydub."""
-    segment = AudioSegment(
-        data=pcm_data,
-        sample_width=sample_width,
-        frame_rate=sample_rate,
-        channels=channels
+    """Run the existing ffmpeg conversion without blocking the event loop."""
+    if sample_width != 2:
+        raise ValueError("Only 16-bit PCM is supported")
+    process = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "s16le",
+        "-ar", str(sample_rate), "-ac", str(channels), "-i", "pipe:0",
+        "-f", "mp3", "-b:a", "128k", "pipe:1",
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
-    buf = io.BytesIO()
-    segment.export(buf, format="mp3", bitrate="128k")
-    return buf.getvalue()
+    try:
+        async with request_deadline():
+            output, _ = await process.communicate(pcm_data)
+        if process.returncode or not 0 < len(output) <= settings.MAX_AUDIO_BYTES:
+            raise TTSUpstreamError(502, "Audio conversion failed")
+        return output
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.communicate()
 
 
 class GeminiTTSEngine(BaseTTSEngine):
     """Google Gemini 2.5 Flash TTS Engine (High fidelity, BYOK or server key)."""
-
-    def __init__(self):
-        self._server_client: genai.Client | None = None
 
     @property
     def engine_id(self) -> str:
@@ -128,89 +112,48 @@ class GeminiTTSEngine(BaseTTSEngine):
 
     @property
     def default_voice(self) -> str:
-        return "Kore"
+        voice = settings.GEMINI_TTS_VOICE
+        if not any(item["id"] == voice for item in SUPPORTED_VOICES):
+            raise TTSConfigError("GEMINI_TTS_VOICE 不在支持的音色列表中。")
+        return voice
 
     @property
     def server_has_key(self) -> bool:
-        return bool(settings.GEMINI_API_KEY)
+        # Public browsers must provide BYOK; server-key access needs a trusted proxy.
+        return False
 
     def get_voices(self) -> list[VoiceInfo]:
         return SUPPORTED_VOICES
 
-    def _resolve_client(self, api_key: str | None = None) -> genai.Client:
-        """
-        Resolve genai.Client prioritizing client-provided BYOK key,
-        falling back to server-level GEMINI_API_KEY.
-        """
-        effective_key = api_key.strip() if (api_key and api_key.strip()) else settings.GEMINI_API_KEY
-
-        if not effective_key:
-            raise TTSConfigError(
-                "Gemini TTS 服务需要 API Key。请在右上角设置中填写您的 Gemini API Key，或切换为 Edge TTS 免费模型。"
-            )
-
-        if api_key and api_key.strip():
-            # Create a client for the user's custom key
-            return genai.Client(api_key=effective_key)
-
-        # Server-level singleton client
-        if self._server_client is None:
-            self._server_client = genai.Client(api_key=effective_key)
-            logger.info("Initialized server singleton genai.Client.")
-        return self._server_client
-
     async def synthesize(
-        self,
-        text: str,
-        voice: str | None = None,
-        api_key: str | None = None,
+        self, text: str, voice: str | None = None, api_key: str | None = None,
     ) -> bytes:
-        client = self._resolve_client(api_key=api_key)
-        model = settings.GEMINI_TTS_MODEL or "gemini-2.5-flash-preview-tts"
         selected_voice = voice or self.default_voice
-
-        # Validate voice against supported list
         if not any(v["id"] == selected_voice for v in SUPPORTED_VOICES):
-            selected_voice = self.default_voice
-
-        logger.info(
-            "Synthesizing speech via Gemini TTS model=%s voice=%s length=%d byok=%s",
-            model, selected_voice, len(text), bool(api_key and api_key.strip())
-        )
-
+            raise TTSConfigError("不支持的 Gemini 音色。")
         try:
-            interaction = await client.aio.interactions.create(
-                model=model,
-                input=text,
-                response_format={"type": "audio"},
-                generation_config={
-                    "speech_config": [
-                        {"voice": selected_voice}
-                    ]
-                }
-            )
-
-            if not interaction.output_audio or not interaction.output_audio.data:
-                logger.error("Gemini TTS did not return audio data in interaction output.")
-                raise TTSUpstreamError(502, "Gemini TTS did not return any audio data.")
-
-            # Decode base64 PCM data
-            raw_pcm = base64.b64decode(interaction.output_audio.data)
-
-            # Convert PCM to MP3
-            mp3_audio = pcm_to_mp3(raw_pcm, sample_rate=24000, channels=1, sample_width=2)
-            return mp3_audio
-
-        except APIError as exc:
-            status_code = getattr(exc, "code", 502) or 502
-            message = getattr(exc, "message", str(exc))
-            logger.error("Gemini API error during TTS synthesis: status=%s, message=%s", status_code, message)
-            raise TTSUpstreamError(int(status_code), f"Gemini API Error: {message}") from exc
-        except TimeoutError as exc:
-            logger.error("Gemini TTS request timed out.")
-            raise TTSTimeoutError("Gemini TTS request timed out.") from exc
+            async with request_deadline(), upstream_slot("gemini"):
+                async with managed_client(create_client(api_key)) as client:
+                    interaction = await client.aio.interactions.create(
+                        model=settings.GEMINI_TTS_MODEL,
+                        input=text,
+                        response_format={"type": "audio"},
+                        generation_config={"speech_config": [{"voice": selected_voice}]},
+                    )
+                    audio = interaction.output_audio
+                    if not audio or not audio.data or len(audio.data) > settings.MAX_AUDIO_BYTES * 4:
+                        raise TTSUpstreamError(502, "Invalid audio response")
+                    mime_parts = (audio.mime_type or "audio/l16").lower().split(";")
+                    parameters = dict(part.strip().split("=", 1) for part in mime_parts[1:] if "=" in part)
+                    sample_rate = int(getattr(audio, "sample_rate", None) or parameters.get("rate", 24000))
+                    channels = getattr(audio, "channels", None) or 1
+                    if mime_parts[0].strip() not in {"audio/l16", "audio/pcm"} or not 8000 <= sample_rate <= 48000 or channels not in (1, 2):
+                        raise TTSUpstreamError(502, "Unsupported audio format")
+                    raw_pcm = base64.b64decode(audio.data, validate=True)
+                    if not raw_pcm or len(raw_pcm) % (2 * channels):
+                        raise TTSUpstreamError(502, "Invalid PCM response")
+                    return await pcm_to_mp3(raw_pcm, sample_rate=sample_rate, channels=channels)
         except TTSException:
             raise
         except Exception as exc:
-            logger.exception("Unexpected error during Gemini TTS synthesis: %s", type(exc).__name__)
-            raise TTSException("Failed to generate audio via Gemini TTS.") from exc
+            raise provider_error(exc, "gemini") from None

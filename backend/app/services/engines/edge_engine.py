@@ -1,7 +1,8 @@
-import asyncio
 import logging
 import edge_tts
 from app.config import settings
+from app.services.errors import TTSConfigError, TTSException, TTSUpstreamError, provider_error
+from app.services.runtime import request_deadline, upstream_slot
 from app.services.engines.base import BaseTTSEngine, VoiceInfo, SentenceCue, TimedSynthesisResult
 
 logger = logging.getLogger(__name__)
@@ -49,16 +50,6 @@ SUPPORTED_VOICES: list[VoiceInfo] = [
 class EdgeTTSEngine(BaseTTSEngine):
     """Microsoft Edge TTS engine (Free, fast, multi-lingual, no API key required)."""
 
-    def __init__(self):
-        self._semaphore: asyncio.Semaphore | None = None
-
-    def _get_semaphore(self) -> asyncio.Semaphore:
-        """Lazy-initialize asyncio Semaphore in the running event loop."""
-        if self._semaphore is None:
-            self._semaphore = asyncio.Semaphore(settings.EDGE_TTS_MAX_CONCURRENCY)
-            logger.info("Initialized Edge TTS concurrency semaphore (limit=%d)", settings.EDGE_TTS_MAX_CONCURRENCY)
-        return self._semaphore
-
     @property
     def engine_id(self) -> str:
         return "edge"
@@ -93,11 +84,10 @@ class EdgeTTSEngine(BaseTTSEngine):
     ) -> TimedSynthesisResult:
         selected_voice = voice or self.default_voice
         if not any(v["id"] == selected_voice for v in SUPPORTED_VOICES):
-            selected_voice = self.default_voice
+            raise TTSConfigError("不支持的 Edge 音色。")
 
         logger.info("Synthesizing speech via Edge TTS voice=%s length=%d", selected_voice, len(text))
-        semaphore = self._get_semaphore()
-        async with semaphore:
+        async with request_deadline(), upstream_slot("edge"):
             try:
                 communicate = edge_tts.Communicate(
                     text,
@@ -106,15 +96,21 @@ class EdgeTTSEngine(BaseTTSEngine):
                 )
                 chunks: list[bytes] = []
                 raw_boundaries: list[dict] = []
+                audio_size = 0
 
                 async for chunk in communicate.stream():
                     if chunk["type"] == "audio":
+                        audio_size += len(chunk["data"])
+                        if audio_size > settings.MAX_AUDIO_BYTES:
+                            raise TTSUpstreamError(502, "Audio response too large")
                         chunks.append(chunk["data"])
                     elif chunk["type"] == "SentenceBoundary":
+                        if len(raw_boundaries) >= 1000:
+                            raise TTSUpstreamError(502, "Too many sentence boundaries")
                         raw_boundaries.append(chunk)
 
                 if not chunks:
-                    raise RuntimeError("Edge TTS returned empty audio stream.")
+                    raise TTSUpstreamError(502, "Empty audio stream")
 
                 audio_bytes = b"".join(chunks)
 
@@ -148,9 +144,10 @@ class EdgeTTSEngine(BaseTTSEngine):
 
                 return TimedSynthesisResult(audio_bytes=audio_bytes, sentences=sentences)
 
+            except TTSException:
+                raise
             except Exception as exc:
-                logger.exception("Edge TTS synthesis failed: %s", type(exc).__name__)
-                raise RuntimeError(f"Edge TTS synthesis error: {exc}") from exc
+                raise provider_error(exc, "edge") from None
 
     async def synthesize(
         self,

@@ -1,5 +1,10 @@
 import sqlite3
 import logging
+import threading
+
+from app.config import settings
+from app.services.errors import StorageFullError
+from app.validation import normalize_client_id
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -9,16 +14,36 @@ DB_PATH = Path(__file__).resolve().parent.parent / "cache" / "history.db"
 
 
 _initialized = False
+_init_lock = threading.Lock()
+
+
+def connect_database() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(DB_PATH), timeout=settings.DB_BUSY_TIMEOUT_SECONDS)
+    conn.row_factory = sqlite3.Row
+    try:
+        page_size = conn.execute("pragma page_size").fetchone()[0]
+        conn.execute(f"pragma max_page_count={max(1, settings.DB_MAX_BYTES // page_size)}")
+        conn.execute("pragma journal_size_limit=1048576")
+        return conn
+    except BaseException:
+        conn.close()
+        raise
 
 
 def init_db() -> None:
+    with _init_lock:
+        if not _initialized:
+            _initialize_db()
+
+
+def _initialize_db() -> None:
     """Create the history table if it doesn't exist and run migrations."""
     global _initialized
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    conn = connect_database()
     try:
         conn.execute("pragma journal_mode=wal")
+        conn.execute("begin immediate")
         cursor = conn.execute("select name from sqlite_master where type='table' and name='history'")
         table_exists = cursor.fetchone() is not None
 
@@ -83,8 +108,7 @@ def _get_conn():
     """Context manager for SQLite connections with Row factory."""
     if not _initialized:
         init_db()
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    conn = connect_database()
     try:
         yield conn
     finally:
@@ -93,13 +117,16 @@ def _get_conn():
 
 def add_or_touch(client_id: str, text: str, voice: str, model: str, engine: str, cache_key: str) -> None:
     """Insert a new history record for a client, or update last_played_at if it already exists."""
-    cid = client_id.strip() if client_id and client_id.strip() else "default"
+    cid = normalize_client_id(client_id)
     with _get_conn() as conn:
+        conn.execute("begin immediate")
         cursor = conn.execute(
             "update history set last_played_at = datetime('now', 'localtime') where client_id = ? and cache_key = ?",
             (cid, cache_key)
         )
         if cursor.rowcount == 0:
+            if conn.execute("select count(*) from history").fetchone()[0] >= settings.HISTORY_MAX_RECORDS:
+                raise StorageFullError("History record quota reached")
             conn.execute(
                 "insert into history (client_id, text, voice, model, engine, cache_key) values (?, ?, ?, ?, ?, ?)",
                 (cid, text, voice, model, engine, cache_key)
@@ -109,7 +136,7 @@ def add_or_touch(client_id: str, text: str, voice: str, model: str, engine: str,
 
 def touch(client_id: str, cache_key: str) -> None:
     """Update last_played_at for an existing client history record."""
-    cid = client_id.strip() if client_id and client_id.strip() else "default"
+    cid = normalize_client_id(client_id)
     with _get_conn() as conn:
         conn.execute(
             "update history set last_played_at = datetime('now', 'localtime') where client_id = ? and cache_key = ?",
@@ -120,7 +147,7 @@ def touch(client_id: str, cache_key: str) -> None:
 
 def list_history(client_id: str, limit: int = 50) -> list[dict]:
     """Return history records for a client ordered by last_played_at descending."""
-    cid = client_id.strip() if client_id and client_id.strip() else "default"
+    cid = normalize_client_id(client_id)
     with _get_conn() as conn:
         rows = conn.execute(
             "select id, text, voice, model, engine, cache_key, created_at, last_played_at "
@@ -132,7 +159,7 @@ def list_history(client_id: str, limit: int = 50) -> list[dict]:
 
 def delete_history(client_id: str, history_id: int) -> bool:
     """Delete a client's history record. Returns True if deleted, False otherwise."""
-    cid = client_id.strip() if client_id and client_id.strip() else "default"
+    cid = normalize_client_id(client_id)
     with _get_conn() as conn:
         cursor = conn.execute(
             "delete from history where id = ? and client_id = ?",
@@ -144,7 +171,7 @@ def delete_history(client_id: str, history_id: int) -> bool:
 
 def clear_all_history(client_id: str) -> int:
     """Delete all history records for a client. Returns count of deleted records."""
-    cid = client_id.strip() if client_id and client_id.strip() else "default"
+    cid = normalize_client_id(client_id)
     with _get_conn() as conn:
         cursor = conn.execute("delete from history where client_id = ?", (cid,))
         conn.commit()

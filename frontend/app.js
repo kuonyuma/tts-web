@@ -114,7 +114,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
   const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
-  const MAX_CHAR_COUNT = 1000;
+  let MAX_CHAR_COUNT = 1000;
+  let MIN_CHAR_COUNT = 1;
+  let requestTimeoutMs = 45000;
   const PLAYBACK_SPEEDS = [0.75, 1.0, 1.25];
   const FUSION_APPROACH_MS = 2200;
   const FUSION_HOLD_MS = 600;
@@ -323,13 +325,56 @@ document.addEventListener("DOMContentLoaded", () => {
     return raw;
   }
 
+  async function apiFetch(url, options = {}) {
+    const target = new URL(url, window.location.href);
+    if (target.origin !== window.location.origin) throw new Error("响应地址无效。");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+    let reader;
+    try {
+      const response = await fetch(target.href, { ...options, signal: controller.signal });
+      // Keep the deadline active while receiving the body, including audio.
+      const chunks = [];
+      let size = 0;
+      if (response.body) {
+        reader = response.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > 32 * 1024 * 1024) {
+            controller.abort();
+            throw new Error("服务器响应超过大小限制。");
+          }
+          chunks.push(value);
+        }
+      }
+      return new Response([204, 205, 304].includes(response.status) ? null : new Blob(chunks), {
+        status: response.status, statusText: response.statusText, headers: response.headers,
+      });
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("请求超时，请稍后重试。");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      reader?.releaseLock();
+    }
+  }
+
   // ── Engine & Voice Management ──────────────────────────────────
 
   async function loadEngines() {
     try {
-      const res = await fetch("/api/engines");
+      const res = await apiFetch("/api/engines");
       if (!res.ok) throw new Error("Failed to load engines list");
       availableEngines = await res.json();
+      const limits = availableEngines[0];
+      if (Number.isInteger(limits?.max_text_length)) MAX_CHAR_COUNT = limits.max_text_length;
+      if (Number.isInteger(limits?.min_text_length)) MIN_CHAR_COUNT = limits.min_text_length;
+      if (Number.isFinite(limits?.request_timeout_seconds)) requestTimeoutMs = (limits.request_timeout_seconds + 15) * 1000;
+      // HTML maxlength counts UTF-16 units; validation below counts Unicode characters.
+      textInput.maxLength = MAX_CHAR_COUNT * 2;
+      updateCharCount();
       renderEngineSelect();
     } catch (err) {
       console.warn("Using fallback engine config:", err);
@@ -370,7 +415,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const savedEngine = localStorage.getItem("tts_selected_engine") || "edge";
 
     engineSelect.innerHTML = availableEngines
-      .map((eng) => `<option value="${eng.id}">${escapeHtml(getEngineLabel(eng.id, eng.name))}</option>`)
+      .map((eng) => `<option value="${escapeHtml(eng.id)}">${escapeHtml(getEngineLabel(eng.id, eng.name))}</option>`)
       .join("");
 
     if (availableEngines.some((e) => e.id === savedEngine)) {
@@ -396,7 +441,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const savedVoice = localStorage.getItem(`tts_selected_voice_${currentEngineId}`);
 
     voiceSelect.innerHTML = engineObj.voices
-      .map((v) => `<option value="${v.id}">${escapeHtml(getVoiceLabel(v.id, v.name))}</option>`)
+      .map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(getVoiceLabel(v.id, v.name))}</option>`)
       .join("");
 
     if (savedVoice && engineObj.voices.some((v) => v.id === savedVoice)) {
@@ -499,7 +544,7 @@ document.addEventListener("DOMContentLoaded", () => {
       testKeyBtn.disabled = true;
 
       try {
-        const res = await fetch("/api/tts/test-key", {
+        const res = await apiFetch("/api/tts/test-key", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ api_key: key }),
@@ -508,10 +553,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.valid) {
           showKeyTestResult("success", data.message || "连接成功，Key 可以正常使用。");
         } else {
-          showKeyTestResult("error", data.message || "连接测试失败。");
+          showKeyTestResult("error", data.message || localizeErrorMessage(data.detail, "连接测试失败。"));
         }
       } catch (err) {
-        showKeyTestResult("error", "与服务器通信失败。");
+        showKeyTestResult("error", err.message || "与服务器通信失败。");
       } finally {
         testKeyBtn.disabled = false;
       }
@@ -544,7 +589,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Character counter ──────────────────────────────────────────
 
   function updateCharCount() {
-    const length = textInput.value.length;
+    const length = Array.from(textInput.value).length;
     charCounter.textContent = `${length} / ${MAX_CHAR_COUNT} 字`;
 
     if (length > MAX_CHAR_COUNT) {
@@ -1120,9 +1165,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function escapeHtml(str) {
-    const div = document.createElement("div");
-    div.appendChild(document.createTextNode(str));
-    return div.innerHTML;
+    const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    return String(str ?? "").replace(/[&<>"']/g, (character) => entities[character]);
   }
 
   // ── Collapsible left history; narrow screens use an overlay. ──
@@ -1201,7 +1245,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getClientId() {
     let clientId = localStorage.getItem("tts_client_id");
-    if (!clientId) {
+    if (!clientId || clientId === "default" || !/^[A-Za-z0-9_-]{1,128}$/.test(clientId)) {
       clientId = (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
         ? crypto.randomUUID()
         : "c_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -1214,7 +1258,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function loadHistory() {
     try {
-      const response = await fetch("/api/history", {
+      const response = await apiFetch("/api/history", {
         headers: { "X-Client-ID": getClientId() },
       });
       if (!response.ok) return;
@@ -1249,9 +1293,9 @@ document.addEventListener("DOMContentLoaded", () => {
       historyList.innerHTML = records
         .map(
           (record) => `
-        <li class="history-item" data-id="${record.id}" data-cache-key="${record.cache_key}" data-engine="${escapeHtml(record.engine || "edge")}" data-voice="${escapeHtml(record.voice || "")}">
+        <li class="history-item" data-id="${escapeHtml(record.id)}" data-cache-key="${escapeHtml(record.cache_key)}" data-engine="${escapeHtml(record.engine || "edge")}" data-voice="${escapeHtml(record.voice || "")}">
           <div class="history-item-main">
-            <button class="history-play-btn history-replay-btn" title="播放" aria-label="播放" data-cache-key="${record.cache_key}">
+            <button class="history-play-btn history-replay-btn" title="播放" aria-label="播放" data-cache-key="${escapeHtml(record.cache_key)}">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
@@ -1263,7 +1307,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
           <div class="history-item-meta">
             <span class="history-time">${formatRelativeTime(record.last_played_at)}</span>
-            <button class="history-delete-btn" title="删除" aria-label="删除" data-id="${record.id}">
+            <button class="history-delete-btn" title="删除" aria-label="删除" data-id="${escapeHtml(record.id)}">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -1304,7 +1348,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       let manifest = null;
       try {
-        const flowResponse = await fetch(`/api/tts/flow/${cacheKey}`, {
+        const flowResponse = await apiFetch(`/api/tts/flow/${cacheKey}`, {
           headers: { "X-Client-ID": getClientId() },
         });
         if (flowResponse.ok) {
@@ -1315,7 +1359,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const audioUrl = manifest?.audio_url || `/api/tts/${cacheKey}`;
-      const response = await fetch(audioUrl, {
+      const response = await apiFetch(audioUrl, {
         headers: { "X-Client-ID": getClientId() },
       });
       if (!response.ok) {
@@ -1395,7 +1439,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const response = await fetch(`/api/history/${historyId}`, {
+      const response = await apiFetch(`/api/history/${historyId}`, {
         method: "DELETE",
         headers: { "X-Client-ID": getClientId() },
       });
@@ -1418,7 +1462,7 @@ document.addEventListener("DOMContentLoaded", () => {
     items.forEach((item) => item.classList.add("is-deleting"));
 
     try {
-      const response = await fetch("/api/history", {
+      const response = await apiFetch("/api/history", {
         method: "DELETE",
         headers: { "X-Client-ID": getClientId() },
       });
@@ -1776,7 +1820,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setExplainSyncStatus("generating", "正在生成解说");
     updateExplainInputState();
     try {
-      const response = await fetch("/api/explain", {
+      const response = await apiFetch("/api/explain", {
         method: "POST",
         headers: getExplainHeaders(),
         body: JSON.stringify({ text, lang, thinking_level: thinking }),
@@ -1839,7 +1883,7 @@ document.addEventListener("DOMContentLoaded", () => {
     refreshFusionState();
     updateExplainInputState();
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `/api/explain?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(lang)}&thinking=${encodeURIComponent(thinking)}`,
         { headers: { "X-Client-ID": getClientId() } }
       );
@@ -1883,7 +1927,7 @@ document.addEventListener("DOMContentLoaded", () => {
     appendExplainBubble("user", message);
     if (explainChatInput) explainChatInput.value = "";
     try {
-      const response = await fetch("/api/explain/chat", {
+      const response = await apiFetch("/api/explain/chat", {
         method: "POST",
         headers: getExplainHeaders(),
         body: JSON.stringify({
@@ -2002,6 +2046,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleGenerateTTS() {
+    if (ttsPending) return;
     const rawText = textInput.value;
     const text = rawText.trim();
 
@@ -2013,8 +2058,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (text.length > MAX_CHAR_COUNT) {
-      showError(`文本长度超过上限（当前 ${text.length} 字 / 上限 ${MAX_CHAR_COUNT} 字）。`);
+    const characterCount = Array.from(text).length;
+    if (characterCount < MIN_CHAR_COUNT || characterCount > MAX_CHAR_COUNT) {
+      showError(`文本长度需为 ${MIN_CHAR_COUNT} 至 ${MAX_CHAR_COUNT} 字（当前 ${characterCount} 字）。`);
       return;
     }
 
@@ -2050,7 +2096,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let voiceUsed = selectedVoice;
 
       if (selectedEngine === "edge") {
-        const flowResponse = await fetch("/api/tts/flow", {
+        const flowResponse = await apiFetch("/api/tts/flow", {
           method: "POST",
           headers,
           body: JSON.stringify({
@@ -2072,7 +2118,7 @@ document.addEventListener("DOMContentLoaded", () => {
           activeTimeline = manifest.timeline_available ? (manifest.sentences || []) : [];
 
           // Fetch the MP3 audio
-          const audioResponse = await fetch(manifest.audio_url, {
+          const audioResponse = await apiFetch(manifest.audio_url, {
             headers: { "X-Client-ID": getClientId() },
           });
           if (thisRequestId !== ttsRequestId) return;
@@ -2086,7 +2132,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (flowResponse.status === 422) {
           // Fallback to /api/tts
           activeTimeline = [];
-          const response = await fetch("/api/tts", {
+          const response = await apiFetch("/api/tts", {
             method: "POST",
             headers,
             body: JSON.stringify({ text, engine: selectedEngine, voice: selectedVoice }),
@@ -2104,7 +2150,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         // Gemini or other engines without timeline support
         activeTimeline = [];
-        const response = await fetch("/api/tts", {
+        const response = await apiFetch("/api/tts", {
           method: "POST",
           headers,
           body: JSON.stringify({

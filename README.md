@@ -28,7 +28,7 @@ It provides an out-of-the-box dual-engine architecture: completely free and keyl
   - Keys are sent via request headers and held in server memory only during the ongoing request. **Never written to databases, never persisted to disk, and never logged**.
 - 👥 **Multi-Tenant Isolation without Login**:
   - Automatically generates a `Client-UUID` per browser session.
-  - History viewing and deletion are tenant-isolated to prevent unauthorized access (IDOR protected), while sharing a global `SHA-256` audio cache across users for optimal performance.
+  - History viewing and deletion are tenant-isolated to separate browser records (client UUIDs are not account authentication), while sharing a global `SHA-256` audio cache across users for optimal performance.
 - 🛡️ **Edge Concurrency & Anti-Rate-Limit Protection**:
   - Built-in `asyncio.Semaphore` (default concurrency: 3) queues requests smoothly, protecting your server IP from being throttled by Microsoft Edge services.
 - 💾 **Double-Layer Smart Caching**:
@@ -72,11 +72,13 @@ It provides an out-of-the-box dual-engine architecture: completely free and keyl
 │ - Free, No Key Required              │ │ - Gemini 2.5 Flash Preview TTS │
 │ - asyncio.Semaphore concurrency queue│ │ - Interactions API             │
 │ - Output: Direct MP3 Stream          │ │ - Output: Base64 PCM 24kHz     │
-│ - Voices: Nanami, Keita, Xiaoxiao... │ │ - pydub + ffmpeg -> MP3 128k   │
+│ - Voices: Nanami, Keita, Xiaoxiao... │ │ - async ffmpeg -> MP3 128k   │
 └──────────────────────────────────────┘ └────────────────────────────────┘
 ```
 
 ---
+
+For public deployment, limits and recovery, read [Stable release deployment](docs/STABLE_RELEASE.md).
 
 ## 🚀 Quick Start
 
@@ -112,11 +114,11 @@ cd tts-web
 
 #### 2. Install dependencies
 ```bash
-uv sync
+uv sync --frozen
 ```
 
 #### 3. (Optional) Configure environment variables
-If you want to provide a default server-side Gemini API key:
+If you need server-side Gemini credentials, also configure SERVER_KEY_ACCESS_TOKEN as described in the deployment guide:
 ```bash
 cp backend/.env.example backend/.env
 # Edit backend/.env and set GEMINI_API_KEY
@@ -138,10 +140,10 @@ Create or edit `backend/.env`:
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `GEMINI_API_KEY` | *(empty)* | Optional server-side default Gemini API Key (fallback if user does not provide BYOK key) |
+| `GEMINI_API_KEY` | *(empty)* | Server Gemini key; requires an authorized X-Server-Key-Token |
 | `EDGE_TTS_MAX_CONCURRENCY` | `3` | Maximum simultaneous concurrent requests for Edge TTS |
 | `MAX_TEXT_LENGTH` | `1000` | Maximum character limit per synthesis request |
-| `CORS_ORIGINS` | `*` | Allowed CORS origins (comma-separated) |
+| `CORS_ORIGINS` | *(empty; same-origin)* | Allowed CORS origins (comma-separated) |
 
 ---
 
