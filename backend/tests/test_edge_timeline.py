@@ -1,4 +1,5 @@
 import pytest
+from app.services.errors import TTSUpstreamError
 from unittest.mock import patch, MagicMock
 from app.services.engines.edge_engine import EdgeTTSEngine
 from app.services.engines.base import SentenceCue, TimedSynthesisResult
@@ -37,7 +38,7 @@ async def test_edge_timeline_success():
 
 @pytest.mark.anyio
 async def test_edge_timeline_empty_audio_raises():
-    """Verify empty audio stream raises RuntimeError."""
+    """Verify empty audio stream raises TTSUpstreamError."""
     engine = EdgeTTSEngine()
 
     async def fake_stream():
@@ -47,7 +48,7 @@ async def test_edge_timeline_empty_audio_raises():
     mock_communicate.stream = fake_stream
 
     with patch("edge_tts.Communicate", return_value=mock_communicate):
-        with pytest.raises(RuntimeError, match="empty audio stream"):
+        with pytest.raises(TTSUpstreamError):
             await engine.synthesize_with_timeline("テスト")
 
 

@@ -30,7 +30,10 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --frozen --dev
+
+      - name: Install audio conversion dependency
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Run backend tests
         run: uv run pytest
@@ -59,3 +62,24 @@ jobs:
 
       - name: Build image
         run: docker build --tag japanese-tts-web:ci .
+
+      - name: Verify offline startup and restart
+        run: |
+          docker run -d --name tts-ci --network none japanese-tts-web:ci
+          for attempt in $(seq 1 20); do
+            if docker exec tts-ci /app/.venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then break; fi
+            sleep 1
+          done
+          docker exec tts-ci /app/.venv/bin/python -c "import urllib.request; assert b'<!DOCTYPE html>' in urllib.request.urlopen('http://127.0.0.1:8000/').read()"
+          docker restart tts-ci
+          for attempt in $(seq 1 20); do
+            if docker exec tts-ci /app/.venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then break; fi
+            sleep 1
+          done
+          docker exec tts-ci /app/.venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+
+      - name: Container logs and cleanup
+        if: always()
+        run: |
+          docker logs tts-ci || true
+          docker rm -f tts-ci || true

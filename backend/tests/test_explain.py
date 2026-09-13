@@ -1,6 +1,5 @@
-import sqlite3
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, Mock
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -9,29 +8,10 @@ from app.services.explain_service import (
     TTSUpstreamError,
     build_explain_key,
 )
-from app.services.history_service import DB_PATH
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Client-ID": "test-client"})
 
 TEST_CLIENT = "test-explain-client"
-
-
-def _cleanup_test_rows():
-    conn = sqlite3.connect(str(DB_PATH))
-    try:
-        conn.execute("delete from explanations where client_id = ?", (TEST_CLIENT,))
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
-    finally:
-        conn.close()
-
-
-@pytest.fixture(autouse=True)
-def _isolate_db():
-    _cleanup_test_rows()
-    yield
-    _cleanup_test_rows()
 
 
 @patch("app.api.explain.save_explanation")
@@ -169,7 +149,7 @@ def test_chat_success(mock_get, mock_answer, mock_append):
     mock_get.return_value = {
         "text": "Hello world.",
         "lang": "zh",
-        "explain_key": "key1",
+        "explain_key": "0123456789abcdef",
         "explanation": "stored",
         "messages": [],
         "created_at": "",
@@ -183,14 +163,14 @@ def test_chat_success(mock_get, mock_answer, mock_append):
 
     response = client.post(
         "/api/explain/chat",
-        json={"explain_key": "key1", "message": "为什么用 are？"},
+        json={"explain_key": "0123456789abcdef", "message": "为什么用 are？"},
         headers={"X-Client-ID": TEST_CLIENT, "X-Gemini-Api-Key": "k"},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["answer"] == "这是追问的回答。"
-    assert data["explain_key"] == "key1"
-    mock_append.assert_called_once_with(TEST_CLIENT, "key1", "为什么用 are？", "这是追问的回答。")
+    assert data["explain_key"] == "0123456789abcdef"
+    mock_append.assert_called_once_with(TEST_CLIENT, "0123456789abcdef", "为什么用 are？", "这是追问的回答。")
 
 
 @patch("app.api.explain.get_explanation", return_value=None)
@@ -198,7 +178,7 @@ def test_chat_unknown_key(mock_get):
     """Verify chat on a missing session returns 404"""
     response = client.post(
         "/api/explain/chat",
-        json={"explain_key": "nope", "message": "hi"},
+        json={"explain_key": "ffffffffffffffff", "message": "hi"},
         headers={"X-Client-ID": TEST_CLIENT},
     )
     assert response.status_code == 404
@@ -270,7 +250,7 @@ def test_call_text_model_uses_interactions_api():
     from app.services.explain_service import generate_explanation_text
 
     create_mock = AsyncMock(return_value=SimpleNamespace(output_text="  explained text  "))
-    stub_client = SimpleNamespace(aio=SimpleNamespace(interactions=SimpleNamespace(create=create_mock)))
+    stub_client = SimpleNamespace(close=Mock(), aio=SimpleNamespace(aclose=AsyncMock(), interactions=SimpleNamespace(create=create_mock)))
 
     async def _run():
         with patch.object(explain_service, "resolve_text_client", return_value=stub_client):
@@ -292,7 +272,7 @@ def test_call_text_model_empty_output():
     from app.services.explain_service import generate_explanation_text
 
     create_mock = AsyncMock(return_value=SimpleNamespace(output_text="   "))
-    stub_client = SimpleNamespace(aio=SimpleNamespace(interactions=SimpleNamespace(create=create_mock)))
+    stub_client = SimpleNamespace(close=Mock(), aio=SimpleNamespace(aclose=AsyncMock(), interactions=SimpleNamespace(create=create_mock)))
 
     async def _run():
         with patch.object(explain_service, "resolve_text_client", return_value=stub_client):

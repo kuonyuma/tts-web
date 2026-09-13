@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+from app.validation import validate_text
+from app.services.engines import get_engine
 
 
 class TTSRequest(BaseModel):
@@ -11,11 +13,13 @@ class TTSRequest(BaseModel):
     )
     engine: str = Field(
         default="edge",
+        max_length=16,
         description="TTS engine identifier: 'edge' (free) or 'gemini' (BYOK/high quality).",
         examples=["edge", "gemini"]
     )
     voice: str | None = Field(
         default=None,
+        max_length=64,
         description="Voice model identifier (optional, defaults to engine's default voice).",
         examples=["ja-JP-NanamiNeural", "zh-CN-XiaoxiaoNeural", "Kore"]
     )
@@ -23,10 +27,24 @@ class TTSRequest(BaseModel):
     @field_validator("text")
     @classmethod
     def validate_non_empty(cls, value: str) -> str:
-        trimmed = value.strip()
-        if not trimmed:
-            raise ValueError("Text cannot be empty or only whitespace.")
-        return trimmed
+        return validate_text(value)
+
+    @field_validator("engine")
+    @classmethod
+    def validate_engine(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in ("edge", "gemini"):
+            raise ValueError("Unknown TTS engine")
+        return value
+
+    @model_validator(mode="after")
+    def validate_voice(self):
+        engine = get_engine(self.engine)
+        if self.voice is not None:
+            self.voice = self.voice.strip()
+            if not any(v["id"] == self.voice for v in engine.get_voices()):
+                raise ValueError("Voice is not supported by the selected engine")
+        return self
 
 
 class ErrorResponse(BaseModel):
@@ -48,10 +66,20 @@ class EngineInfoResponse(BaseModel):
     default_voice: str
     server_has_key: bool | None = None
     voices: list[VoiceInfoResponse]
+    max_text_length: int = 1000
+    min_text_length: int = 1
+    request_timeout_seconds: float = 30
 
 
 class TestKeyRequest(BaseModel):
-    api_key: str = Field(..., min_length=1, description="Gemini API Key to test.")
+    api_key: str = Field(..., min_length=1, max_length=256, description="Gemini API Key to test.")
+
+    @field_validator("api_key")
+    @classmethod
+    def validate_key(cls, value: str) -> str:
+        if not value.isascii() or any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ValueError("Invalid API key format")
+        return value.strip()
 
 
 class TestKeyResponse(BaseModel):

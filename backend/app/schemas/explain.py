@@ -1,5 +1,6 @@
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator
+from app.validation import CACHE_KEY_PATTERN, validate_text
 
 
 ExplainLang = Literal["zh", "ja", "en"]
@@ -34,10 +35,7 @@ class ExplainRequest(BaseModel):
     @field_validator("text")
     @classmethod
     def validate_non_empty(cls, value: str) -> str:
-        trimmed = value.strip()
-        if not trimmed:
-            raise ValueError("Text cannot be empty or only whitespace.")
-        return trimmed
+        return validate_text(value)
 
 
 class ExplainResponse(BaseModel):
@@ -49,7 +47,7 @@ class ExplainResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    explain_key: str = Field(..., min_length=1, description="Explanation session key returned by /api/explain.")
+    explain_key: str = Field(..., pattern=CACHE_KEY_PATTERN, description="Explanation session key returned by /api/explain.")
     thinking_level: ThinkingLevel = Field(
         default="medium",
         description="Model thinking effort for the follow-up answer.",
@@ -68,6 +66,10 @@ class ChatRequest(BaseModel):
         trimmed = value.strip()
         if not trimmed:
             raise ValueError("Message cannot be empty or only whitespace.")
+        try:
+            trimmed.encode("utf-8")
+        except UnicodeEncodeError:
+            raise ValueError("Message must contain valid Unicode characters") from None
         return trimmed
 
 

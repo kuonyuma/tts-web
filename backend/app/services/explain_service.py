@@ -1,10 +1,8 @@
 import hashlib
 import json
 import logging
-import sqlite3
+import threading
 from contextlib import contextmanager
-from google import genai
-from google.genai.errors import APIError
 
 from app.config import settings
 from app.services.engines import (
@@ -13,7 +11,11 @@ from app.services.engines import (
     TTSTimeoutError,
     TTSUpstreamError,
 )
-from app.services.history_service import DB_PATH
+from app.services.history_service import init_db, connect_database
+from app.services.errors import StorageFullError, provider_error
+from app.services.gemini_client import create_client, managed_client
+from app.services.runtime import request_deadline, upstream_slot
+from app.validation import normalize_client_id
 
 logger = logging.getLogger(__name__)
 
@@ -25,42 +27,42 @@ MAX_CONTEXT_TURNS = 20
 MAX_STORED_MESSAGES = 60
 
 _initialized = False
+_init_lock = threading.Lock()
 
 
 def _normalize_client_id(client_id: str | None) -> str:
-    cid = client_id.strip() if client_id and client_id.strip() else "default"
-    return cid
+    return normalize_client_id(client_id)
 
 
 @contextmanager
 def _get_conn():
     """SQLite connection sharing history.db, with lazy explanations-table init."""
     global _initialized
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    init_db()
+    conn = connect_database()
     try:
-        if not _initialized:
-            conn.execute("""
-                create table if not exists explanations (
-                    id           integer primary key autoincrement,
-                    client_id    text    not null default 'default',
-                    text         text    not null,
-                    lang         text    not null default 'zh',
-                    explain_key  text    not null,
-                    explanation  text    not null,
-                    messages     text    not null default '[]',
-                    created_at   text    not null default (datetime('now', 'localtime')),
-                    updated_at   text    not null default (datetime('now', 'localtime')),
-                    unique(client_id, explain_key)
+        with _init_lock:
+            if not _initialized:
+                conn.execute("""
+                    create table if not exists explanations (
+                        id           integer primary key autoincrement,
+                        client_id    text    not null default 'default',
+                        text         text    not null,
+                        lang         text    not null default 'zh',
+                        explain_key  text    not null,
+                        explanation  text    not null,
+                        messages     text    not null default '[]',
+                        created_at   text    not null default (datetime('now', 'localtime')),
+                        updated_at   text    not null default (datetime('now', 'localtime')),
+                        unique(client_id, explain_key)
+                    )
+                """)
+                conn.execute(
+                    "create index if not exists idx_explanations_client "
+                    "on explanations(client_id, updated_at desc)"
                 )
-            """)
-            conn.execute(
-                "create index if not exists idx_explanations_client "
-                "on explanations(client_id, updated_at desc)"
-            )
-            conn.commit()
-            _initialized = True
+                conn.commit()
+                _initialized = True
         yield conn
     finally:
         conn.close()
@@ -110,29 +112,8 @@ def _check_lang(lang: str) -> str:
     return normalized if normalized in SUPPORTED_LANGS else "zh"
 
 
-_server_client: genai.Client | None = None
-
-
-def resolve_text_client(api_key: str | None = None) -> genai.Client:
-    """
-    Resolve genai.Client prioritizing the client-provided BYOK key,
-    falling back to the server-level key. Mirrors GeminiTTSEngine behavior.
-    """
-    global _server_client
-    effective_key = api_key.strip() if (api_key and api_key.strip()) else settings.GEMINI_API_KEY
-
-    if not effective_key:
-        raise TTSConfigError(
-            "AI 讲解服务需要 API Key。请在右上角设置中填写您的 Gemini API Key，或关闭 AI 讲解开关。"
-        )
-
-    if api_key and api_key.strip():
-        return genai.Client(api_key=effective_key)
-
-    if _server_client is None:
-        _server_client = genai.Client(api_key=effective_key)
-        logger.info("Initialized server singleton genai.Client for explanations.")
-    return _server_client
+def resolve_text_client(api_key: str | None = None):
+    return create_client(api_key)
 
 
 def build_explain_contents(text: str, lang: str) -> str:
@@ -175,34 +156,22 @@ async def _call_text_model(
     Call the Gemini text model via the Interactions API and return stripped text output.
     Uses the same call shape as the proven TTS/test-key paths.
     """
-    client = resolve_text_client(api_key=api_key)
-    model = settings.GEMINI_TEXT_MODEL or "gemini-3.8-flash"
-    level = _normalize_thinking_level(thinking_level)
     try:
-        interaction = await client.aio.interactions.create(
-            model=model,
-            input=contents,
-            # Interactions API expects lowercase level names ('low'/'medium'/'high').
-            generation_config={"thinking_level": level},
-        )
-        output = (interaction.output_text or "").strip()
-        if not output:
-            logger.error("Gemini text model returned empty content.")
-            raise TTSUpstreamError(502, "AI 讲解服务未返回任何内容。")
-        return output
-    except APIError as exc:
-        status_code = getattr(exc, "code", 502) or 502
-        message = getattr(exc, "message", str(exc))
-        logger.error("Gemini API error during explanation: status=%s, message=%s", status_code, message)
-        raise TTSUpstreamError(int(status_code), f"Gemini API Error: {message}") from exc
-    except TimeoutError as exc:
-        logger.error("Gemini explanation request timed out.")
-        raise TTSTimeoutError("Gemini explanation request timed out.") from exc
+        async with request_deadline(), upstream_slot("gemini"):
+            async with managed_client(resolve_text_client(api_key=api_key)) as client:
+                interaction = await client.aio.interactions.create(
+                    model=settings.GEMINI_TEXT_MODEL,
+                    input=contents,
+                    generation_config={"thinking_level": _normalize_thinking_level(thinking_level)},
+                )
+                output = (interaction.output_text or "").strip()
+                if not output or len(output) > 16000:
+                    raise TTSUpstreamError(502, "Invalid text response")
+                return output
     except TTSException:
         raise
     except Exception as exc:
-        logger.exception("Unexpected error during explanation: %s", type(exc).__name__)
-        raise TTSException("Failed to generate explanation.") from exc
+        raise provider_error(exc, "gemini-text") from None
 
 
 async def generate_explanation_text(
@@ -256,6 +225,12 @@ def save_explanation(
     """Insert or replace a one-shot explanation for a client."""
     cid = _normalize_client_id(client_id)
     with _get_conn() as conn:
+        conn.execute("begin immediate")
+        exists = conn.execute(
+            "select 1 from explanations where client_id = ? and explain_key = ?", (cid, explain_key)
+        ).fetchone()
+        if not exists and conn.execute("select count(*) from explanations").fetchone()[0] >= settings.EXPLANATION_MAX_RECORDS:
+            raise StorageFullError("Explanation record quota reached")
         conn.execute(
             "insert into explanations (client_id, text, lang, explain_key, explanation, messages) "
             "values (?, ?, ?, ?, ?, '[]') "
@@ -272,6 +247,7 @@ def append_chat_messages(
     """Append one Q&A turn to a stored explanation. Returns updated messages, None if missing."""
     cid = _normalize_client_id(client_id)
     with _get_conn() as conn:
+        conn.execute("begin immediate")
         row = conn.execute(
             "select messages from explanations where client_id = ? and explain_key = ?",
             (cid, explain_key),

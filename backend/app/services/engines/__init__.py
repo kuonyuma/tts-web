@@ -1,3 +1,4 @@
+from app.config import settings
 from app.services.engines.base import BaseTTSEngine, VoiceInfo
 from app.services.engines.edge_engine import EdgeTTSEngine
 from app.services.engines.gemini_engine import (
@@ -19,11 +20,11 @@ DEFAULT_ENGINE_ID = "edge"
 
 def get_engine(engine_id: str | None = None) -> BaseTTSEngine:
     """
-    Retrieve TTS engine instance by id. Defaults to Edge TTS if unspecified or unknown.
+    Retrieve a supported engine. Default to Edge only when unspecified.
     """
     target_id = (engine_id or DEFAULT_ENGINE_ID).lower().strip()
     if target_id not in _ENGINES:
-        return _ENGINES[DEFAULT_ENGINE_ID]
+        raise ValueError("Unsupported TTS engine")
     return _ENGINES[target_id]
 
 
@@ -40,6 +41,9 @@ def list_engines_meta() -> list[dict]:
             "is_free": engine.is_free,
             "default_voice": engine.default_voice,
             "voices": engine.get_voices(),
+            "max_text_length": settings.MAX_TEXT_LENGTH,
+            "min_text_length": settings.MIN_TEXT_LENGTH,
+            "request_timeout_seconds": settings.TTS_TIMEOUT_SECONDS,
         }
         if engine_id == "gemini":
             meta["server_has_key"] = getattr(engine, "server_has_key", False)
