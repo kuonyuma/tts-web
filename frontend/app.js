@@ -511,14 +511,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ── Sidebar Nav & New Reading Button ────────────────────────────
-  const newReadingBtn = document.getElementById("newReadingBtn");
+  // ── Sidebar Navigation ──────────────────────────────────────────
   const clearTextBtn = document.getElementById("clearTextBtn");
   const sidebarHistoryNavBtn = document.getElementById("sidebarHistoryNavBtn");
   const sidebarFavNavBtn = document.getElementById("sidebarFavNavBtn");
   const sidebarFilesNavBtn = document.getElementById("sidebarFilesNavBtn");
 
-  function resetDraftToNew() {
+  function clearDraft() {
     textInput.value = "";
     updateCharCount();
     draftText = "";
@@ -528,17 +527,8 @@ document.addEventListener("DOMContentLoaded", () => {
     textInput.focus();
   }
 
-  if (newReadingBtn) {
-    newReadingBtn.addEventListener("click", () => {
-      resetDraftToNew();
-      if (document.body.classList.contains("drawer-open")) {
-        closeSidebar();
-      }
-    });
-  }
-
   if (clearTextBtn) {
-    clearTextBtn.addEventListener("click", resetDraftToNew);
+    clearTextBtn.addEventListener("click", clearDraft);
   }
 
   function showSidebarToast(message) {
@@ -619,11 +609,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (settingsBtn) {
     settingsBtn.addEventListener("click", openSettingsModal);
-  }
-
-  const copilotSettingsBtn = document.getElementById("copilotSettingsBtn");
-  if (copilotSettingsBtn) {
-    copilotSettingsBtn.addEventListener("click", openSettingsModal);
   }
 
   if (modalCloseBtn) {
@@ -2516,7 +2501,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Initialize ─────────────────────────────────────────────────
   const storedExpanded = localStorage.getItem("tts_history_expanded");
-  if (historyDockMedia.matches && storedExpanded !== "0") {
+  if (historyDockMedia.matches && storedExpanded === "1") {
     historySection?.classList.add("open");
   }
   syncSidebarLayout();
