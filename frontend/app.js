@@ -469,6 +469,115 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ── Theme Management (Default / Sakura / Dark) ──────────────────
+  const THEME_STORAGE_KEY = "tts_theme";
+  const DEFAULT_THEME = "sakura";
+  const themeOptionsGrid = document.getElementById("themeOptionsGrid");
+  const sakuraDecor = document.getElementById("sakuraDecor");
+
+  function applyTheme(themeId) {
+    const validTheme = ["default", "sakura", "dark"].includes(themeId) ? themeId : DEFAULT_THEME;
+    document.documentElement.setAttribute("data-theme", validTheme);
+    document.body.setAttribute("data-theme", validTheme);
+    localStorage.setItem(THEME_STORAGE_KEY, validTheme);
+
+    if (sakuraDecor) {
+      sakuraDecor.style.display = validTheme === "sakura" ? "block" : "none";
+    }
+
+    if (themeOptionsGrid) {
+      const btns = themeOptionsGrid.querySelectorAll(".theme-option-btn");
+      btns.forEach((btn) => {
+        const isActive = btn.getAttribute("data-theme") === validTheme;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-checked", String(isActive));
+      });
+    }
+  }
+
+  function initThemeSelector() {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME;
+    applyTheme(savedTheme);
+
+    if (themeOptionsGrid) {
+      themeOptionsGrid.addEventListener("click", (e) => {
+        const btn = e.target.closest(".theme-option-btn");
+        if (!btn) return;
+        const targetTheme = btn.getAttribute("data-theme");
+        if (targetTheme) {
+          applyTheme(targetTheme);
+        }
+      });
+    }
+  }
+
+  // ── Sidebar Nav & New Reading Button ────────────────────────────
+  const newReadingBtn = document.getElementById("newReadingBtn");
+  const clearTextBtn = document.getElementById("clearTextBtn");
+  const sidebarHistoryNavBtn = document.getElementById("sidebarHistoryNavBtn");
+  const sidebarFavNavBtn = document.getElementById("sidebarFavNavBtn");
+  const sidebarFilesNavBtn = document.getElementById("sidebarFilesNavBtn");
+
+  function resetDraftToNew() {
+    textInput.value = "";
+    updateCharCount();
+    draftText = "";
+    setWorkspaceState("idle", "");
+    updateSentencePreview();
+    if (errorAlert) errorAlert.style.display = "none";
+    textInput.focus();
+  }
+
+  if (newReadingBtn) {
+    newReadingBtn.addEventListener("click", () => {
+      resetDraftToNew();
+      if (document.body.classList.contains("drawer-open")) {
+        closeSidebar();
+      }
+    });
+  }
+
+  if (clearTextBtn) {
+    clearTextBtn.addEventListener("click", resetDraftToNew);
+  }
+
+  function showSidebarToast(message) {
+    let toast = document.getElementById("sidebarToast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "sidebarToast";
+      toast.className = "sidebar-toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add("visible");
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.classList.remove("visible");
+    }, 2000);
+  }
+
+  if (sidebarFavNavBtn) {
+    sidebarFavNavBtn.addEventListener("click", () => {
+      showSidebarToast("收藏功能即将上线，敬请期待 ✨");
+    });
+  }
+
+  if (sidebarFilesNavBtn) {
+    sidebarFilesNavBtn.addEventListener("click", () => {
+      showSidebarToast("文件管理功能即将上线，敬请期待 ✨");
+    });
+  }
+
+  if (sidebarHistoryNavBtn) {
+    sidebarHistoryNavBtn.addEventListener("click", () => {
+      if (historySection) {
+        const scrollable = historySection.querySelector(".sidebar-scrollable");
+        if (scrollable) scrollable.scrollTop = 0;
+      }
+    });
+  }
+
   // ── BYOK API Key Settings Modal ───────────────────────────────
 
   function updateKeyBadge() {
@@ -483,6 +592,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const storedKey = localStorage.getItem("tts_gemini_api_key") || "";
     geminiApiKeyInput.value = storedKey;
     geminiApiKeyInput.type = "password";
+    const currentTheme = localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME;
+    applyTheme(currentTheme);
     hideKeyTestResult();
     settingsModal.style.display = "flex";
     geminiApiKeyInput.focus();
@@ -508,6 +619,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (settingsBtn) {
     settingsBtn.addEventListener("click", openSettingsModal);
+  }
+
+  const copilotSettingsBtn = document.getElementById("copilotSettingsBtn");
+  if (copilotSettingsBtn) {
+    copilotSettingsBtn.addEventListener("click", openSettingsModal);
   }
 
   if (modalCloseBtn) {
@@ -1276,6 +1392,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const countStr = String(records.length);
       if (historyBadge) historyBadge.textContent = countStr;
       if (headerHistoryBadge) headerHistoryBadge.textContent = countStr;
+      const navHistoryBadge = document.getElementById("navHistoryBadge");
+      if (navHistoryBadge) navHistoryBadge.textContent = countStr;
 
       if (clearHistoryBtn) {
         clearHistoryBtn.style.display = records.length > 0 ? "inline-block" : "none";
@@ -1423,6 +1541,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const countStr = String(remainingItems);
       if (historyBadge) historyBadge.textContent = countStr;
       if (headerHistoryBadge) headerHistoryBadge.textContent = countStr;
+      const navHistoryBadge = document.getElementById("navHistoryBadge");
+      if (navHistoryBadge) navHistoryBadge.textContent = countStr;
       if (remainingItems === 0 && clearHistoryBtn) {
         clearHistoryBtn.style.display = "none";
       }
@@ -1535,13 +1655,74 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderExplainEmpty() {
     if (!explainMessages) return;
     cancelExplainReveal();
-    explainMessages.innerHTML = "";
-    const div = document.createElement("div");
-    div.className = "explain-empty";
-    div.innerHTML = explainEnabled
-      ? "<strong>听懂这句话</strong><span>生成语音后，这里会出现翻译、语法和表达分析。</span>"
-      : "<strong>AI 解说已关闭</strong><span>打开开关后，可以查看当前句子的翻译和语法分析。</span>";
-    explainMessages.appendChild(div);
+    explainMessages.innerHTML = `
+      <div class="explain-empty-card" id="explainEmptyCard">
+        <div class="explain-empty-art">
+          <svg viewBox="0 0 130 90" width="116" height="80" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Sparkle Star -->
+            <path d="M102 20 Q104 14 106 20 Q112 22 106 24 Q104 30 102 24 Q96 22 102 20 Z" fill="#f48fb1" opacity="0.9"/>
+            <!-- Stack of books next to cat -->
+            <rect x="86" y="56" width="32" height="9" rx="2.5" fill="#ffd1dc" stroke="#f48fb1" stroke-width="1.3"/>
+            <line x1="90" y1="61" x2="114" y2="61" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round"/>
+            <rect x="90" y="48" width="28" height="8" rx="2.5" fill="#e1bee7" stroke="#ce93d8" stroke-width="1.3"/>
+            <line x1="94" y1="52" x2="114" y2="52" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round"/>
+            <!-- Chibi Cat Body -->
+            <ellipse cx="50" cy="52" rx="22" ry="18" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.6"/>
+            <!-- Cat Head -->
+            <circle cx="50" cy="35" r="16" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.6"/>
+            <!-- Ears with brown/pink patches -->
+            <path d="M37 24 L42 14 L47 22 Z" fill="#8d6e63" stroke="#e0cbd4" stroke-width="1.2"/>
+            <path d="M39 22 L42 16 L45 21 Z" fill="#ffcdd2"/>
+            <path d="M63 24 L58 14 L53 22 Z" fill="#8d6e63" stroke="#e0cbd4" stroke-width="1.2"/>
+            <path d="M61 22 L58 16 L55 21 Z" fill="#ffcdd2"/>
+            <!-- Eyes -->
+            <ellipse cx="44" cy="34" rx="2" ry="2.6" fill="#42303a"/>
+            <ellipse cx="56" cy="34" rx="2" ry="2.6" fill="#42303a"/>
+            <!-- Blush -->
+            <circle cx="41" cy="38" r="3" fill="#ffb6c1" opacity="0.7"/>
+            <circle cx="59" cy="38" r="3" fill="#ffb6c1" opacity="0.7"/>
+            <!-- Mouth / Nose -->
+            <circle cx="50" cy="36" r="1" fill="#ff80ab"/>
+            <path d="M47 38 Q50 40 53 38" stroke="#42303a" stroke-width="1.1" stroke-linecap="round" fill="none"/>
+            <!-- Open Book held by paws -->
+            <path d="M28 58 C38 52 46 53 50 56 C54 53 62 52 72 58 L72 44 C62 39 54 40 50 43 C46 40 38 39 28 44 Z" fill="#ede7f6" stroke="#9575cd" stroke-width="1.5"/>
+            <path d="M50 43 L50 56" stroke="#9575cd" stroke-width="1.5"/>
+            <!-- Paws -->
+            <ellipse cx="36" cy="46" rx="3.5" ry="2.5" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.2"/>
+            <ellipse cx="64" cy="46" rx="3.5" ry="2.5" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.2"/>
+          </svg>
+        </div>
+        <h4 class="explain-empty-title">${explainEnabled ? "AI 解说已就绪" : "AI 解说已关闭"}</h4>
+        <p class="explain-empty-desc">
+          ${explainEnabled
+            ? "生成语音后，可以查看当前句子的翻译和语法分析。<br />你的 AI 阅读伙伴，随时为你答疑解惑。"
+            : "打开开关后，可以查看当前句子的翻译和语法分析。<br />你的 AI 阅读伙伴，随时为你答疑解惑。"}
+        </p>
+        <div class="explain-quick-actions" role="region" aria-label="快捷分析入口">
+          <button type="button" class="explain-action-card" data-action="translate">
+            <span class="action-card-icon">📄</span>
+            <div class="action-card-text">
+              <span class="action-card-title">翻译解析</span>
+              <span class="action-card-sub">多语言对照</span>
+            </div>
+          </button>
+          <button type="button" class="explain-action-card" data-action="summary">
+            <span class="action-card-icon">📑</span>
+            <div class="action-card-text">
+              <span class="action-card-title">要点总结</span>
+              <span class="action-card-sub">提炼核心内容</span>
+            </div>
+          </button>
+          <button type="button" class="explain-action-card" data-action="grammar">
+            <span class="action-card-icon">💡</span>
+            <div class="action-card-text">
+              <span class="action-card-title">语法分析</span>
+              <span class="action-card-sub">深入讲解</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    `;
   }
 
   function hideExplainSection() {
@@ -2018,6 +2199,54 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
+
+    const explainSuggestions = document.querySelector(".explain-suggestions");
+    if (explainSuggestions) {
+      explainSuggestions.addEventListener("click", (e) => {
+        const chip = e.target.closest(".suggest-chip");
+        if (!chip) return;
+        const prompt = chip.getAttribute("data-prompt");
+        if (prompt && explainChatInput) {
+          explainChatInput.value = prompt;
+          explainChatInput.focus();
+        }
+      });
+    }
+
+    if (explainMessages) {
+      explainMessages.addEventListener("click", (e) => {
+        const actionBtn = e.target.closest(".explain-action-card");
+        if (!actionBtn) return;
+        const action = actionBtn.getAttribute("data-action");
+        const currentText = currentExplainText || textInput.value.trim();
+        if (!currentText) {
+          textInput.focus();
+          return;
+        }
+        if (action === "translate") {
+          if (!currentExplainKey) {
+            requestExplanation(currentText, { manual: true });
+          } else if (explainChatInput) {
+            explainChatInput.value = "请给出这段文本的翻译和对齐解析";
+            sendExplainChat();
+          }
+        } else if (action === "summary") {
+          if (!currentExplainKey) {
+            requestExplanation(currentText, { manual: true });
+          } else if (explainChatInput) {
+            explainChatInput.value = "请提炼总结这句话的核心要点与主旨";
+            sendExplainChat();
+          }
+        } else if (action === "grammar") {
+          if (!currentExplainKey) {
+            requestExplanation(currentText, { manual: true });
+          } else if (explainChatInput) {
+            explainChatInput.value = "请深入细致讲解这句话的语法结构与词汇搭配";
+            sendExplainChat();
+          }
+        }
+      });
+    }
   }
 
   // ── Main TTS generation ────────────────────────────────────────
@@ -2286,10 +2515,12 @@ document.addEventListener("DOMContentLoaded", () => {
   generateBtn.addEventListener("click", handleGenerateTTS);
 
   // ── Initialize ─────────────────────────────────────────────────
-  if (historyDockMedia.matches && localStorage.getItem("tts_history_expanded") === "1") {
+  const storedExpanded = localStorage.getItem("tts_history_expanded");
+  if (historyDockMedia.matches && storedExpanded !== "0") {
     historySection?.classList.add("open");
   }
   syncSidebarLayout();
+  initThemeSelector();
   document.body.classList.add("motion-enabled");
   draftText = textInput.value.trim();
   setWorkspaceState("idle", draftText);

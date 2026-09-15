@@ -209,6 +209,7 @@ async def test_deadline_cancels_provider_and_frees_key(monkeypatch):
         assert response.status_code == 502 and "超时" in response.json()["detail"]
         assert time.monotonic() - start < 0.5
         assert cancelled.is_set() and not runtime._state().locks
+        monkeypatch.setattr(settings, "TTS_TIMEOUT_SECONDS", 5.0)
         with patch("app.api.tts.synthesize", AsyncMock(return_value=b"audio")):
             assert (await http.post("/api/tts", json={"text": "timeout"})).status_code == 200
 

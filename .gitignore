@@ -52,6 +52,7 @@ __pypackages__/
 # Testing, Coverage & Quality Tools
 # ==========================================
 .pytest_cache/
+.pytest_temp/
 .coverage
 .coverage.*
 .cache
