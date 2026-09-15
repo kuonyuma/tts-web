@@ -95,31 +95,35 @@ let browserExit;
     await wait('document.readyState === "complete"');
     await delay(300);
 
-    // 1. Verify button was moved to sidebar and removed from copilot header
+    // 1. Verify settings is available only from the sidebar
     const inSidebar = await evaluate('Boolean(document.querySelector("#historySection #settingsBtn"))');
-    const inCopilot = await evaluate('Boolean(document.querySelector(".explain-header #settingsBtn"))');
+    const inCopilot = await evaluate('Boolean(document.querySelector(".explain-header .copilot-settings-btn"))');
     assert.equal(inSidebar, true, 'Settings button must be inside the history sidebar');
-    assert.equal(inCopilot, false, 'Settings button must not be inside the copilot header');
+    assert.equal(inCopilot, false, 'Copilot header must not contain a settings button');
     console.log('PASS settings button moved from copilot to sidebar');
 
-    // 2. Verify initial theme is sakura
+    // 2. Verify history remains collapsed until the user opens it
+    assert.equal(await evaluate('document.getElementById("historySection").classList.contains("open")'), false);
+    console.log('PASS history sidebar defaults to collapsed');
+
+    // 3. Verify initial theme is sakura
     const initialTheme = await evaluate('document.documentElement.getAttribute("data-theme")');
     assert.equal(initialTheme, 'sakura', 'Initial theme should default to sakura');
     const sakuraDecorVisible = await evaluate('getComputedStyle(document.getElementById("sakuraDecor")).display !== "none"');
     assert.equal(sakuraDecorVisible, true, 'Sakura decor should be visible in sakura theme');
     console.log('PASS initial theme defaults to sakura and displays atmosphere decor');
 
-    // 3. Open settings modal from sidebar settings button
+    // 4. Open settings modal from sidebar settings button
     await evaluate('document.getElementById("settingsBtn").click()');
     await wait('document.getElementById("settingsModal").style.display === "flex"');
     console.log('PASS clicking sidebar settings button opens settings modal');
 
-    // 4. Verify multi-choice theme options exist in settings modal
+    // 5. Verify multi-choice theme options exist in settings modal
     const themeButtons = await evaluate('Array.from(document.querySelectorAll("#themeOptionsGrid .theme-option-btn")).map(b => b.getAttribute("data-theme"))');
     assert.deepEqual(themeButtons.sort(), ['dark', 'default', 'sakura'].sort());
     console.log('PASS theme options (default, sakura, dark) exist in settings modal');
 
-    // 5. Switch to default theme (Classic Blue)
+    // 6. Switch to default theme (Classic Blue)
     await evaluate('document.querySelector(\'.theme-option-btn[data-theme="default"]\').click()');
     assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), 'default');
     assert.equal(await evaluate('localStorage.getItem("tts_theme")'), 'default');
@@ -127,40 +131,38 @@ let browserExit;
     assert.equal(defaultSakuraHidden, true, 'Sakura decor should be hidden in default theme');
     console.log('PASS switching to default theme works and updates localStorage');
 
-    // 6. Switch to dark theme
+    // 7. Switch to dark theme
     await evaluate('document.querySelector(\'.theme-option-btn[data-theme="dark"]\').click()');
     assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), 'dark');
     assert.equal(await evaluate('localStorage.getItem("tts_theme")'), 'dark');
     console.log('PASS switching to dark theme works and updates localStorage');
 
-    // 7. Switch back to sakura theme
+    // 8. Switch back to sakura theme
     await evaluate('document.querySelector(\'.theme-option-btn[data-theme="sakura"]\').click()');
     assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), 'sakura');
     assert.equal(await evaluate('localStorage.getItem("tts_theme")'), 'sakura');
     assert.equal(await evaluate('getComputedStyle(document.getElementById("sakuraDecor")).display !== "none"'), true);
     console.log('PASS switching back to sakura theme works');
 
-    // 8. Close settings modal
+    // 9. Close settings modal
     await evaluate('document.getElementById("modalCloseBtn").click()');
     await wait('document.getElementById("settingsModal").style.display === "none"');
     console.log('PASS closing settings modal works');
 
-    // 9. Test New Reading button and Clear text button
-    await evaluate('document.getElementById("textInput").value = "Testing new reading reset"');
+    // 10. Verify New Reading is absent and Clear text still works
+    assert.equal(await evaluate('Boolean(document.getElementById("newReadingBtn"))'), false);
+    await evaluate('document.getElementById("textInput").value = "Testing clear reset"');
     await evaluate('document.getElementById("clearTextBtn").click()');
     assert.equal(await evaluate('document.getElementById("textInput").value'), '');
-    await evaluate('document.getElementById("textInput").value = "Testing sidebar new reading"');
-    await evaluate('document.getElementById("newReadingBtn").click()');
-    assert.equal(await evaluate('document.getElementById("textInput").value'), '');
-    console.log('PASS clear button and sidebar new reading button reset input');
+    console.log('PASS New Reading is absent and Clear text resets input');
 
-    // 10. Verify cute cat illustration in sidebar & reading banner in center
+    // 11. Verify cute cat illustration in sidebar & reading banner in center
     assert.equal(await evaluate('Boolean(document.querySelector(".sidebar-cat-card"))'), true);
     assert.equal(await evaluate('Boolean(document.querySelector(".work-reading-banner"))'), true);
     assert.equal(await evaluate('Boolean(document.querySelector(".explain-empty-card"))'), true);
     console.log('PASS cute cat card, reading banner, and copilot empty card exist');
 
-    // 11. Verify mobile viewport has no horizontal overflow
+    // 12. Verify mobile viewport has no horizontal overflow
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), true);
     console.log('PASS mobile responsive layout has no horizontal overflow');

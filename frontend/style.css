@@ -3187,68 +3187,8 @@ body {
 .history-sidebar.open .sidebar-scrollable { transform: translate3d(0, 0, 0); }
 
 @media (min-width: 1200px) {
-  body {
-    padding: 14px;
-    height: 100vh;
-    box-sizing: border-box;
-    overflow-x: hidden;
-  }
-  body.history-open {
-    padding-left: calc(var(--history-width) + 28px);
-  }
-  body.history-open .history-toggle {
-    display: none !important;
-  }
+  body.history-open { padding-left: calc(var(--history-width) + 24px); }
   .sidebar-backdrop { display: none; }
-
-  .history-sidebar {
-    top: 14px;
-    bottom: 14px;
-    left: 14px;
-    height: calc(100vh - 28px);
-    border-radius: 20px;
-    padding-top: 0;
-    box-shadow: 0 10px 30px rgba(220, 140, 160, 0.1);
-    border: 1px solid var(--border);
-    background: var(--bg-card);
-    z-index: 100;
-  }
-  .history-sidebar .sidebar-close-btn {
-    display: none;
-  }
-  .sidebar-brand {
-    padding: 16px 16px 10px;
-  }
-  .main-area {
-    height: calc(100vh - 28px);
-    min-height: 0;
-  }
-  .workspace.shared-workspace {
-    height: 100%;
-    border-radius: 20px;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    gap: 14px;
-    padding: 0;
-  }
-  .workspace.shared-workspace > .work-left {
-    border-radius: 20px;
-    background: var(--bg-card);
-    box-shadow: 0 10px 30px rgba(220, 140, 160, 0.08);
-    border: 1px solid var(--border);
-    padding: 18px 22px;
-  }
-  .workspace.shared-workspace > .work-right {
-    border-radius: 20px;
-    background: var(--bg-card);
-    box-shadow: 0 10px 30px rgba(220, 140, 160, 0.08);
-    border: 1px solid var(--border);
-    padding: 18px 20px;
-  }
-  .workspace-seam {
-    display: none;
-  }
 }
 
 @media (max-width: 1199px) {
@@ -3268,7 +3208,9 @@ body {
 }
 
 /* Fill the available desk width and reserve real space for audio controls. */
-.app-layout { max-width: none; margin: 0; position: relative; z-index: 1; }
+.app-layout { max-width: none; margin: 0; }
+.main-area { height: calc(100dvh - 48px); min-height: 640px; gap: 0; }
+body { padding-top: 24px; padding-bottom: 24px; }
 .history-toggle { top: 26px; }
 
 .workspace.shared-workspace > .work-left { overflow-y: auto; }
@@ -3301,12 +3243,17 @@ body {
 .explain-heading-row .header-btn { flex-shrink: 0; padding: 5px 9px; font-size: 0.75rem; }
 .shared-workspace .explain-controls { justify-content: flex-start; flex-wrap: wrap; }
 
+.history-sidebar { padding-top: 76px; }
 .sidebar-brand { padding: 0 18px 20px; flex-shrink: 0; }
 .sidebar-brand .header-main { flex-wrap: wrap; gap: 9px; }
 .sidebar-brand .app-title { font-size: 1.25rem; }
 .sidebar-brand .brand-orb { width: 30px; height: 30px; border-radius: 10px; }
 .sidebar-brand .header-tag { margin-top: 2px; font-size: 0.68rem; }
 .sidebar-brand .app-subtitle { margin-top: 10px; font-size: 0.72rem; line-height: 1.7; }
+
+@media (min-width: 1200px) {
+  body.history-open { padding-left: calc(var(--history-width) + 16px); }
+}
 @media (max-width: 1199px) {
   body { padding-top: 66px; }
   .history-toggle { top: 16px; }
@@ -3697,43 +3644,6 @@ body[data-theme="dark"]::before,
   border-bottom: 1px solid var(--border);
 }
 
-.sidebar-new-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #ffffff;
-  background: linear-gradient(135deg, #d87391 0%, #b573a6 100%);
-  border: none;
-  border-radius: 9999px;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(216, 115, 145, 0.35);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.15s ease;
-  margin-bottom: 14px;
-}
-
-[data-theme="dark"] .sidebar-new-btn {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
-}
-
-.sidebar-new-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(216, 115, 145, 0.45);
-}
-
-[data-theme="dark"] .sidebar-new-btn:hover {
-  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
-}
-
-.sidebar-new-btn:active {
-  transform: translateY(1px);
-}
-
 .sidebar-menu-list {
   list-style: none;
   display: flex;
@@ -3917,28 +3827,6 @@ body[data-theme="dark"]::before,
 
 [data-theme="sakura"] .sidebar-brand .header-tag {
   display: none;
-}
-
-/* ── Copilot Settings Button ──────────────────────────────── */
-.copilot-settings-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 11px;
-  border-radius: 9999px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.copilot-settings-btn:hover {
-  background: var(--bg-subtle-hover);
-  color: var(--primary);
-  border-color: var(--primary-subtle-border);
 }
 
 /* ── Copilot Empty Card & Suggestions ─────────────────────── */
