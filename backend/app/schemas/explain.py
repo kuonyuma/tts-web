@@ -1,11 +1,12 @@
 from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
-from app.validation import CACHE_KEY_PATTERN, validate_text
+
+from app.validation import validate_text
 
 
 ExplainLang = Literal["zh", "ja", "en"]
-
-ThinkingLevel = Literal["low", "medium", "high"]
+EXPLAIN_KEY_PATTERN = r"^(?:[0-9a-f]{16}|[0-9a-f]{64})$"
 
 
 class ChatMessage(BaseModel):
@@ -13,24 +14,29 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class ReasoningModeResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    quota_weight: int
+
+
+class CopilotModelResponse(BaseModel):
+    id: str
+    name: str
+    default: bool
+    modes: list[ReasoningModeResponse]
+
+
+class CopilotCatalogResponse(BaseModel):
+    models: list[CopilotModelResponse]
+
+
 class ExplainRequest(BaseModel):
-    text: str = Field(
-        ...,
-        min_length=1,
-        max_length=1000,
-        description="The sentence to be explained by the LLM.",
-        examples=["People who exercise regularly are more likely to live longer."],
-    )
-    lang: ExplainLang = Field(
-        default="zh",
-        description="Output language of the explanation: 'zh', 'ja' or 'en'.",
-        examples=["zh"],
-    )
-    thinking_level: ThinkingLevel = Field(
-        default="medium",
-        description="Model thinking effort: 'low', 'medium' or 'high'.",
-        examples=["medium"],
-    )
+    text: str = Field(..., min_length=1, max_length=1000)
+    lang: ExplainLang = "zh"
+    model_id: str | None = Field(default=None, min_length=1, max_length=64)
+    mode_id: str | None = Field(default=None, min_length=1, max_length=32)
 
     @field_validator("text")
     @classmethod
@@ -42,23 +48,17 @@ class ExplainResponse(BaseModel):
     explain_key: str
     explanation: str
     lang: str
+    model_id: str
+    mode_id: str
+    upstream_model: str
     cached: bool
-    messages: list[ChatMessage] = []
+    messages: list[ChatMessage] = Field(default_factory=list)
 
 
 class ChatRequest(BaseModel):
-    explain_key: str = Field(..., pattern=CACHE_KEY_PATTERN, description="Explanation session key returned by /api/explain.")
-    thinking_level: ThinkingLevel = Field(
-        default="medium",
-        description="Model thinking effort for the follow-up answer.",
-        examples=["medium"],
-    )
-    message: str = Field(
-        ...,
-        min_length=1,
-        max_length=500,
-        description="Follow-up question about the explained sentence.",
-    )
+    explain_key: str = Field(..., pattern=EXPLAIN_KEY_PATTERN)
+    mode_id: str | None = Field(default=None, min_length=1, max_length=32)
+    message: str = Field(..., min_length=1, max_length=500)
 
     @field_validator("message")
     @classmethod
@@ -76,3 +76,5 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     explain_key: str
     answer: str
+    model_id: str
+    mode_id: str

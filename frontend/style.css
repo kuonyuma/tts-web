@@ -2552,90 +2552,6 @@ body.is-fusing .ambient-fields::after {
   border-color: rgba(232, 190, 204, 0.72);
 }
 
-.explain-sync-strip {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 48px;
-  padding: 9px 15px;
-  border-bottom: 1px solid rgba(208, 199, 238, 0.38);
-  background: rgba(255, 255, 255, 0.32);
-  cursor: help;
-}
-
-.explain-sync-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 25px;
-  height: 25px;
-  flex: 0 0 auto;
-  color: #7772dc;
-  background: rgba(240, 239, 255, 0.88);
-  border: 1px solid rgba(202, 198, 246, 0.7);
-  border-radius: 50%;
-  font-size: 0.92rem;
-  font-weight: 700;
-}
-
-.explain-sync-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-
-.explain-sync-label {
-  color: var(--text-muted);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: none;
-}
-
-.explain-current-text {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.explain-sync-status {
-  flex: 0 0 auto;
-  padding: 3px 7px;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.56);
-  border: 1px solid rgba(171, 177, 199, 0.32);
-  border-radius: 999px;
-  font-size: 0.66rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.explain-sync-status.is-generating {
-  color: #615bd0;
-  border-color: rgba(183, 178, 245, 0.66);
-  background: rgba(240, 239, 255, 0.82);
-}
-
-.explain-sync-status.is-linked,
-.explain-sync-status.is-playing {
-  color: #4d998b;
-  border-color: rgba(98, 205, 188, 0.36);
-  background: rgba(232, 250, 246, 0.8);
-}
-
-.explain-sync-status.is-dirty {
-  color: #a97946;
-  border-color: rgba(226, 188, 135, 0.44);
-  background: rgba(250, 236, 211, 0.72);
-}
-
 .explain-messages {
   position: relative;
   z-index: 1;
@@ -2696,10 +2612,6 @@ body.is-fusing .ambient-fields::after {
 
 .workspace[data-state="dirty"] .explain-section {
   border-color: rgba(226, 188, 135, 0.48);
-}
-
-.workspace[data-state="dirty"] .explain-sync-strip {
-  background: rgba(250, 236, 211, 0.35);
 }
 
 .workspace[data-state="generating"] .work-left,
@@ -2910,14 +2822,6 @@ input:focus-visible,
     width: 100%;
   }
 
-  .explain-sync-strip {
-    padding-inline: 13px;
-  }
-
-  .explain-sync-status {
-    font-size: 0.62rem;
-  }
-
   .explain-input-row {
     padding-inline: 12px;
   }
@@ -2925,9 +2829,16 @@ input:focus-visible,
 
 /* Shared desk: one surface, two quiet work areas. */
 .workspace.shared-workspace {
+  --workspace-left-track: 1.13fr;
+  --workspace-right-track: 0.87fr;
   isolation: isolate;
   padding: 26px;
-  gap: 36px;
+  grid-template-columns:
+    minmax(360px, var(--workspace-left-track))
+    18px
+    minmax(340px, var(--workspace-right-track));
+  column-gap: 9px;
+  row-gap: 36px;
   border: 1px solid rgba(190, 182, 204, 0.42);
   border-radius: 26px;
   background: rgba(255, 252, 247, 0.84);
@@ -2944,6 +2855,14 @@ input:focus-visible,
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.workspace.shared-workspace > .work-left {
+  grid-column: 1;
+}
+
+.workspace.shared-workspace > .explain-section {
+  grid-column: 3;
 }
 
 .shared-workspace .work-left::before,
@@ -2963,12 +2882,6 @@ input:focus-visible,
   align-content: center;
   background: transparent;
   border-bottom-color: rgba(171, 168, 195, 0.24);
-}
-
-.shared-workspace .explain-sync-strip {
-  padding: 14px 0;
-  background: transparent;
-  border-bottom-color: rgba(171, 168, 195, 0.18);
 }
 
 .shared-workspace .explain-messages {
@@ -3010,19 +2923,79 @@ input:focus-visible,
 }
 
 .workspace-seam {
+  position: relative;
+  z-index: 4;
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.workspace-seam::before {
+  content: "";
   position: absolute;
-  pointer-events: none;
-  top: 26px;
-  bottom: 26px;
-  left: calc(56.5% - 5.7px);
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  left: 50%;
   width: 1px;
-  background: linear-gradient(transparent, rgba(170, 160, 194, 0.26) 18%, rgba(170, 160, 194, 0.26) 82%, transparent);
+  transform: translateX(-50%);
+  background: linear-gradient(transparent, rgba(170, 160, 194, 0.34) 12%, rgba(170, 160, 194, 0.34) 88%, transparent);
+  transition: width 160ms ease, background-color 160ms ease;
+}
+
+.workspace-seam-handle {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 54px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, var(--primary) 1.4px, transparent 1.8px) center / 4px 9px repeat-y,
+    var(--bg-card);
+  box-shadow: 0 5px 16px rgba(70, 54, 120, 0.14);
+  transition: width 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.workspace-seam:hover .workspace-seam-handle,
+.workspace-seam:focus-visible .workspace-seam-handle,
+.workspace-seam.is-dragging .workspace-seam-handle {
+  width: 18px;
+  border-color: var(--primary);
+  box-shadow: 0 6px 20px rgba(112, 107, 229, 0.28);
+  transform: scaleY(1.05);
+}
+
+.workspace-seam:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.workspace-seam:hover::before,
+.workspace-seam:focus-visible::before,
+.workspace-seam.is-dragging::before {
+  width: 2px;
+  background: var(--primary);
+}
+
+body.workspace-resizing,
+body.workspace-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .workspace-seam::after {
   content: "";
   position: absolute;
+  z-index: 0;
   inset: -12px -17px;
+  pointer-events: none;
   background: radial-gradient(ellipse at 50% 18%, rgba(161, 130, 218, 0.32), rgba(229, 158, 189, 0.13) 45%, transparent 72%);
   opacity: 0;
   transform: scaleY(0.45);

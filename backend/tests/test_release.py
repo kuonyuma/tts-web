@@ -79,7 +79,6 @@ def test_server_key_requires_separate_authorization(monkeypatch):
     monkeypatch.setattr(settings, "SERVER_KEY_ACCESS_TOKEN", "a" * 32)
     payload = {"text": "server key access", "engine": "gemini"}
     assert client.post("/api/tts", json=payload).status_code == 400
-    assert client.post("/api/explain", json={"text": "server key access"}).status_code == 400
     assert client.post("/api/tts", json=payload, headers={"X-Server-Key-Token": "wrong"}).status_code == 403
     fake = AsyncMock(return_value=b"audio")
     with patch("app.api.tts.synthesize", fake):
@@ -366,7 +365,7 @@ def mock_gemini_sdk(monkeypatch, handler):
 
 
 @pytest.mark.parametrize("status", [401, 403, 404, 429, 500])
-@pytest.mark.parametrize("endpoint", ["/api/tts", "/api/explain", "/api/tts/test-key"])
+@pytest.mark.parametrize("endpoint", ["/api/tts", "/api/tts/test-key"])
 def test_real_sdk_errors_are_mapped_without_retries_or_secrets(monkeypatch, caplog, status, endpoint):
     async def handler(request):
         return httpx.Response(status, json={"error": {"message": "secret-upstream-detail", "code": status}})
@@ -381,27 +380,6 @@ def test_real_sdk_errors_are_mapped_without_retries_or_secrets(monkeypatch, capl
     assert all(value is not None for value in requests[0].extensions["timeout"].values())
     assert created[0]._api_client._async_httpx_client.is_closed
     assert created[0]._api_client._httpx_client.is_closed
-
-
-@pytest.mark.parametrize("mode", ["timeout", "dns", "reset", "malformed", "empty"])
-def test_real_sdk_transport_and_invalid_response_failures(monkeypatch, mode):
-    async def handler(request):
-        if mode == "timeout":
-            raise httpx.ReadTimeout("secret", request=request)
-        if mode == "dns":
-            raise httpx.ConnectError("secret", request=request)
-        if mode == "reset":
-            raise httpx.ReadError("secret", request=request)
-        if mode == "malformed":
-            return httpx.Response(200, content=b"not-json")
-        return httpx.Response(200, json={"id": "empty", "status": "completed", "steps": []})
-
-    created, requests = mock_gemini_sdk(monkeypatch, handler)
-    response = client.post("/api/explain", json={"text": mode}, headers={"X-Gemini-Api-Key": "fake-key"})
-    assert response.status_code == 502
-    if mode == "timeout":
-        assert "超时" in response.json()["detail"]
-    assert len(requests) == 1 and created[0]._api_client._async_httpx_client.is_closed
 
 
 @pytest.mark.parametrize("mime", ["audio/L16;rate=24000", "audio/l16"])
@@ -419,8 +397,6 @@ def test_real_sdk_success_with_ffmpeg(monkeypatch, mime):
     assert response.status_code == 200
     assert response.content.startswith((b"ID3", b"\xff"))
     assert client.get("/api/tts/" + response.headers["x-cache-key"]).content == response.content
-    response = client.post("/api/explain", json={"text": "Gemini text"}, headers={"X-Gemini-Api-Key": "fake-key"})
-    assert response.status_code == 200 and response.json()["explanation"] == "explained"
     assert all(c._api_client._async_httpx_client.is_closed for c in created)
 
 
@@ -479,7 +455,7 @@ def test_database_file_limit_is_transactional(monkeypatch):
         assert conn.execute("pragma integrity_check").fetchone()[0] == "ok"
 
 
-@pytest.mark.parametrize("endpoint", ["/api/tts", "/api/explain", "/api/tts/test-key"])
+@pytest.mark.parametrize("endpoint", ["/api/tts", "/api/tts/test-key"])
 def test_real_sdk_total_deadline_and_close(monkeypatch, endpoint):
     monkeypatch.setattr(settings, "TTS_TIMEOUT_SECONDS", 0.08)
 
@@ -493,6 +469,16 @@ def test_real_sdk_total_deadline_and_close(monkeypatch, endpoint):
     assert response.status_code == 502 and "超时" in response.json()["detail"]
     assert time.monotonic() - start < 0.6
     assert created and all(c._api_client._async_httpx_client.is_closed for c in created)
+
+
+def test_browser_security_headers_are_present():
+    response = client.get("/")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+    assert response.headers["permissions-policy"].startswith("camera=()")
+    api_response = client.get("/api/copilot/models")
+    assert api_response.headers["cache-control"] == "no-store"
 
 
 def test_cors_uses_configured_origins():

@@ -17,8 +17,15 @@ from app.api.history import router as history_router
 from app.services.history_service import init_db
 from app.config import settings
 from app.api.limits import RequestLimits
+from app.api.security import SecurityHeaders
 from app.services.cache_service import cleanup_cache
-from app.services.errors import TTSException, TTSConfigError, TTSTimeoutError, TTSUpstreamError, TTSBusyError, StorageFullError
+from app.services.llm.gateway import get_catalog
+from app.services.llm.quota import quota_backend_ready
+from app.services.errors import (
+    LLMException, LLMConfigError, LLMTimeoutError, LLMUpstreamError, LLMBusyError,
+    TTSException, TTSConfigError, TTSTimeoutError, TTSUpstreamError, TTSBusyError,
+    StorageFullError,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +54,7 @@ app = FastAPI(
 
 # CORS wraps API limit errors as well as route responses.
 app.add_middleware(RequestLimits)
+app.add_middleware(SecurityHeaders)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -79,6 +87,25 @@ async def provider_failure(request, exc):
     return JSONResponse({"detail": detail}, status_code=code)
 
 
+@app.exception_handler(LLMException)
+async def llm_failure(request, exc):
+    code, detail = 502, "AI 讲解服务暂时不可用，请稍后重试。"
+    if isinstance(exc, LLMConfigError):
+        code, detail = 503, str(exc)
+    elif isinstance(exc, LLMBusyError):
+        code, detail = 503, "AI 讲解服务繁忙，请稍后重试。"
+    elif isinstance(exc, LLMTimeoutError):
+        code, detail = 504, "AI 讲解服务请求超时，请稍后重试。"
+    elif isinstance(exc, LLMUpstreamError):
+        code = 502
+    logger.warning(
+        "request_id=%s llm_error path=%s type=%s upstream_status=%s",
+        getattr(request.state, "request_id", "-"), request.url.path,
+        type(exc).__name__, getattr(exc, "status_code", None),
+    )
+    return JSONResponse({"detail": detail}, status_code=code)
+
+
 async def storage_failure(request, exc):
     full = isinstance(exc, StorageFullError) or getattr(exc, "errno", None) == errno.ENOSPC or getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL
     reason = str(exc) if isinstance(exc, StorageFullError) else None
@@ -101,6 +128,15 @@ async def unexpected_failure(request, exc):
 @app.get("/health", summary="Health check endpoint", tags=["system"])
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/ready", summary="Readiness check endpoint", tags=["system"])
+async def readiness_check():
+    ready = bool(get_catalog()) and await quota_backend_ready()
+    return JSONResponse(
+        {"status": "ready" if ready else "unavailable"},
+        status_code=200 if ready else 503,
+    )
 
 # Register API routes
 app.include_router(tts_router)

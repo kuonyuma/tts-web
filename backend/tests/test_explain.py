@@ -1,282 +1,183 @@
+import asyncio
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, Mock
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
-from app.services.explain_service import (
-    TTSConfigError,
-    TTSUpstreamError,
-    build_explain_key,
-)
+from app.services.errors import LLMConfigError, LLMUpstreamError
+from app.services.explain_service import build_explain_key
+from app.services.llm.types import LLMResult
+
 
 client = TestClient(app, headers={"X-Client-ID": "test-client"})
-
 TEST_CLIENT = "test-explain-client"
+
+
+def generated(content="1. 中文翻译：你好。", model="deepseek-flash", mode="direct"):
+    return (
+        LLMResult(content, "deepseek", "deepseek-flash", {"total_tokens": 20}),
+        model,
+        mode,
+        "deepseek-flash-2026-09-v1",
+    )
 
 
 @patch("app.api.explain.save_explanation")
 @patch("app.api.explain.get_explanation", return_value=None)
 @patch("app.api.explain.generate_explanation_text", new_callable=AsyncMock)
-def test_explain_success_miss(mock_generate, mock_get, mock_save):
-    """Verify a new sentence triggers model generation and returns uncached result"""
-    mock_generate.return_value = "1. 中文翻译：经常锻炼的人更长寿。"
-
+def test_explain_success_miss(mock_generate, _mock_get, mock_save):
+    mock_generate.return_value = generated()
     response = client.post(
         "/api/explain",
-        json={"text": "People who exercise regularly are more likely to live longer.", "lang": "zh"},
-        headers={"X-Client-ID": TEST_CLIENT, "X-Gemini-Api-Key": "test-key"},
+        json={"text": "Hello.", "lang": "zh", "model_id": "deepseek-flash", "mode_id": "direct"},
+        headers={"X-Client-ID": TEST_CLIENT, "X-Gemini-Api-Key": "must-be-ignored"},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["cached"] is False
-    assert data["lang"] == "zh"
-    assert "更长寿" in data["explanation"]
-    assert data["messages"] == []
-    assert len(data["explain_key"]) == 16
-    mock_generate.assert_awaited_once()
-    assert mock_generate.call_args[1]["lang"] == "zh"
-    assert mock_generate.call_args[1]["thinking_level"] == "medium"
-    assert mock_generate.call_args[1]["api_key"] == "test-key"
-    mock_save.assert_called_once()
+    assert data["model_id"] == "deepseek-flash"
+    assert data["mode_id"] == "direct"
+    assert len(data["explain_key"]) == 64
+    assert mock_generate.call_args.kwargs == {
+        "text": "Hello.", "lang": "zh", "model_id": "deepseek-flash", "mode_id": "direct"
+    }
+    assert "api_key" not in mock_generate.call_args.kwargs
+    assert mock_save.call_args.kwargs["provider"] == "deepseek"
 
 
 @patch("app.api.explain.generate_explanation_text", new_callable=AsyncMock)
 @patch("app.api.explain.get_explanation")
 def test_explain_cache_hit(mock_get, mock_generate):
-    """Verify a stored explanation is returned without calling the model"""
     mock_get.return_value = {
-        "text": "Hello world.",
-        "lang": "zh",
-        "explain_key": "abc123",
-        "explanation": "stored explanation",
-        "messages": [{"role": "user", "content": "why?"}],
-        "created_at": "2026-01-01 00:00:00",
-        "updated_at": "2026-01-01 00:00:00",
+        "text": "Hello.", "lang": "zh", "explanation": "stored", "messages": [],
+        "model_id": "deepseek-flash", "mode_id": "direct", "upstream_model": "deepseek-flash",
     }
-
-    response = client.post(
-        "/api/explain",
-        json={"text": "Hello world.", "lang": "zh"},
-        headers={"X-Client-ID": TEST_CLIENT},
-    )
+    response = client.post("/api/explain", json={"text": "Hello."})
     assert response.status_code == 200
-    data = response.json()
-    assert data["cached"] is True
-    assert data["explanation"] == "stored explanation"
-    assert data["messages"] == [{"role": "user", "content": "why?"}]
+    assert response.json()["cached"] is True
     mock_generate.assert_not_awaited()
 
 
-@patch("app.api.explain.get_explanation", return_value=None)
-@patch("app.api.explain.generate_explanation_text", new_callable=AsyncMock)
-def test_explain_missing_key(mock_generate, mock_get):
-    """Verify missing API Key results in 400 with setup prompt"""
-    mock_generate.side_effect = TTSConfigError("AI 讲解服务需要 API Key。")
-
-    response = client.post(
-        "/api/explain",
-        json={"text": "Hello.", "lang": "zh"},
-        headers={"X-Client-ID": TEST_CLIENT},
-    )
-    assert response.status_code == 400
-    assert "API Key" in response.json()["detail"]
-
-
-@patch("app.api.explain.get_explanation", return_value=None)
-@patch("app.api.explain.generate_explanation_text", new_callable=AsyncMock)
-def test_explain_upstream_error(mock_generate, mock_get):
-    """Verify upstream provider error results in 502"""
-    mock_generate.side_effect = TTSUpstreamError(500, "Gemini Error")
-
-    response = client.post(
-        "/api/explain",
-        json={"text": "Hello.", "lang": "en"},
-        headers={"X-Client-ID": TEST_CLIENT},
-    )
-    assert response.status_code == 502
-    assert "暂时不可用" in response.json()["detail"]
-
-
-def test_explain_validation():
-    """Verify empty text and unsupported lang are rejected with 422"""
+def test_explain_selection_validation():
     assert client.post("/api/explain", json={"text": ""}).status_code == 422
-    assert client.post("/api/explain", json={"text": "   "}).status_code == 422
     assert client.post("/api/explain", json={"text": "Hi", "lang": "fr"}).status_code == 422
-    assert client.post("/api/explain", json={"text": "Hi", "thinking_level": "ultra"}).status_code == 422
-    assert client.post("/api/explain", json={"text": "あ" * 1001}).status_code == 422
-
-
-@patch("app.api.explain.get_explanation")
-def test_fetch_explanation_hit(mock_get):
-    """Verify stored explanation lookup returns cached result"""
-    mock_get.return_value = {
-        "text": "Hello.",
-        "lang": "ja",
-        "explain_key": "k1",
-        "explanation": "stored",
-        "messages": [],
-        "created_at": "",
-        "updated_at": "",
-    }
-    response = client.get(
-        "/api/explain",
-        params={"text": "Hello.", "lang": "ja"},
-        headers={"X-Client-ID": TEST_CLIENT},
-    )
-    assert response.status_code == 200
-    assert response.json()["cached"] is True
-    assert response.json()["explanation"] == "stored"
+    assert client.post("/api/explain", json={"text": "Hi", "model_id": "unknown"}).status_code == 422
+    assert client.post(
+        "/api/explain", json={"text": "Hi", "model_id": "deepseek-flash", "mode_id": "ultra"}
+    ).status_code == 422
 
 
 @patch("app.api.explain.get_explanation", return_value=None)
-def test_fetch_explanation_miss(mock_get):
-    """Verify lookup without archive returns 404 and never calls the model"""
-    with patch("app.api.explain.generate_explanation_text", new_callable=AsyncMock) as mock_gen:
-        response = client.get(
-            "/api/explain",
-            params={"text": "Never explained.", "lang": "zh"},
-            headers={"X-Client-ID": TEST_CLIENT},
-        )
-        assert response.status_code == 404
-        mock_gen.assert_not_awaited()
+@patch("app.api.explain.generate_explanation_text", new_callable=AsyncMock)
+def test_explain_sanitizes_upstream_error(mock_generate, _mock_get):
+    mock_generate.side_effect = LLMUpstreamError(401)
+    response = client.post("/api/explain", json={"text": "Hello."})
+    assert response.status_code == 502
+    assert "401" not in response.text
 
 
 @patch("app.api.explain.append_chat_messages")
 @patch("app.api.explain.generate_chat_answer", new_callable=AsyncMock)
 @patch("app.api.explain.get_explanation")
-def test_chat_success(mock_get, mock_answer, mock_append):
-    """Verify follow-up question returns an answer and persists the turn"""
+def test_chat_uses_stored_model(mock_get, mock_answer, mock_append):
+    key = "a" * 64
     mock_get.return_value = {
-        "text": "Hello world.",
-        "lang": "zh",
-        "explain_key": "0123456789abcdef",
-        "explanation": "stored",
-        "messages": [],
-        "created_at": "",
-        "updated_at": "",
+        "text": "Hello.", "lang": "zh", "explanation": "stored", "messages": [],
+        "model_id": "deepseek-flash", "mode_id": "direct", "upstream_model": "deepseek-flash",
     }
-    mock_answer.return_value = "这是追问的回答。"
-    mock_append.return_value = [
-        {"role": "user", "content": "为什么用 are？"},
-        {"role": "assistant", "content": "这是追问的回答。"},
-    ]
-
+    mock_answer.return_value = generated("回答", mode="low")
+    mock_append.return_value = []
     response = client.post(
-        "/api/explain/chat",
-        json={"explain_key": "0123456789abcdef", "message": "为什么用 are？"},
-        headers={"X-Client-ID": TEST_CLIENT, "X-Gemini-Api-Key": "k"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["answer"] == "这是追问的回答。"
-    assert data["explain_key"] == "0123456789abcdef"
-    mock_append.assert_called_once_with(TEST_CLIENT, "0123456789abcdef", "为什么用 are？", "这是追问的回答。")
-
-
-@patch("app.api.explain.get_explanation", return_value=None)
-def test_chat_unknown_key(mock_get):
-    """Verify chat on a missing session returns 404"""
-    response = client.post(
-        "/api/explain/chat",
-        json={"explain_key": "ffffffffffffffff", "message": "hi"},
+        "/api/explain/chat", json={"explain_key": key, "message": "为什么？", "mode_id": "low"},
         headers={"X-Client-ID": TEST_CLIENT},
     )
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json()["answer"] == "回答"
+    assert mock_answer.call_args.kwargs["model_id"] == "deepseek-flash"
+    assert mock_answer.call_args.kwargs["mode_id"] == "low"
 
 
-def test_chat_validation():
-    """Verify empty follow-up message is rejected with 422"""
-    assert client.post("/api/explain/chat", json={"explain_key": "k", "message": ""}).status_code == 422
-    assert client.post("/api/explain/chat", json={"explain_key": "k", "message": "  "}).status_code == 422
+def test_storage_roundtrip_and_migration_metadata():
+    from app.services.explain_service import append_chat_messages, get_explanation, save_explanation
 
-
-def test_storage_roundtrip_and_isolation():
-    """Verify real save/get/append flow and per-client isolation"""
-    from app.services.explain_service import (
-        save_explanation,
-        get_explanation,
-        append_chat_messages,
+    key = build_explain_key("Storage sentence.", "zh")
+    save_explanation(
+        TEST_CLIENT, "Storage sentence.", "zh", key, "body",
+        model_id="deepseek-flash", provider="deepseek", upstream_model="deepseek-flash",
+        mode_id="direct", profile_revision="r1",
     )
-
-    text = "Storage roundtrip sentence."
-    key = build_explain_key(text, "zh")
-    save_explanation(TEST_CLIENT, text, "zh", key, "explanation body")
-
     stored = get_explanation(TEST_CLIENT, key)
-    assert stored is not None
-    assert stored["explanation"] == "explanation body"
-    assert stored["messages"] == []
-
-    updated = append_chat_messages(TEST_CLIENT, key, "q1", "a1")
-    assert updated == [
-        {"role": "user", "content": "q1"},
-        {"role": "assistant", "content": "a1"},
-    ]
-    assert get_explanation(TEST_CLIENT, key)["messages"] == updated
-
-    # Other clients cannot see this record; unknown keys return None
+    assert stored["provider"] == "deepseek"
+    assert stored["profile_revision"] == "r1"
+    assert append_chat_messages(TEST_CLIENT, key, "q", "a")[-1]["content"] == "a"
     assert get_explanation("someone-else", key) is None
-    assert append_chat_messages(TEST_CLIENT, "missing", "q", "a") is None
 
 
-@patch("app.api.explain.save_explanation")
-@patch("app.api.explain.get_explanation", return_value=None)
-@patch("app.api.explain.generate_explanation_text", new_callable=AsyncMock)
-def test_explain_thinking_level_passthrough(mock_generate, mock_get, mock_save):
-    """Verify thinking_level reaches the generation layer"""
-    mock_generate.return_value = "deep explanation"
+def test_key_separates_model_mode_profile_and_prompt(monkeypatch):
+    direct = build_explain_key("Hello.", "zh", "deepseek-flash", "direct")
+    deep = build_explain_key("Hello.", "zh", "deepseek-flash", "deep")
+    assert direct != deep
+    monkeypatch.setattr(settings, "COPILOT_PROMPT_VERSION", "changed")
+    assert direct != build_explain_key("Hello.", "zh", "deepseek-flash", "direct")
 
-    response = client.post(
-        "/api/explain",
-        json={"text": "Hello world.", "lang": "en", "thinking_level": "high"},
-        headers={"X-Client-ID": TEST_CLIENT},
-    )
+
+def test_catalog_only_exposes_configured_models(monkeypatch):
+    monkeypatch.setattr(settings, "DEEPSEEK_API_KEY", "server-secret")
+    monkeypatch.setattr(settings, "QWEN_API_KEY", "")
+    monkeypatch.setattr(settings, "ZHIPU_API_KEY", "server-secret")
+    monkeypatch.setattr(settings, "COPILOT_ENABLED_MODELS", (
+        "deepseek-flash", "qwen-3.7-flash", "glm-5.3-flash",
+    ))
+    monkeypatch.setattr(settings, "COPILOT_ENABLE_UNVERIFIED_GLM53", False)
+    data = client.get("/api/copilot/models").json()
+    assert [model["id"] for model in data["models"]] == ["deepseek-flash"]
+    assert "secret" not in str(data).lower()
+
+
+def test_missing_server_key_is_service_configuration_error(monkeypatch):
+    from app.services.llm.registry import provider_api_key
+
+    monkeypatch.setattr(settings, "DEEPSEEK_API_KEY", "")
+    with pytest.raises(LLMConfigError):
+        provider_api_key("deepseek")
+
+
+def test_trusted_proxy_identity_is_required(monkeypatch):
+    monkeypatch.setattr(settings, "COPILOT_AUTH_MODE", "trusted_proxy")
+    monkeypatch.setattr(settings, "AUTH_PROXY_SECRET", "s" * 32)
+    assert client.get("/api/copilot/models").status_code == 401
+    response = client.get("/api/copilot/models", headers={
+        "X-Authenticated-User": "user@example.com",
+        "X-Auth-Proxy-Secret": "s" * 32,
+    })
     assert response.status_code == 200
-    assert mock_generate.call_args[1]["thinking_level"] == "high"
 
 
-def test_explain_key_separates_thinking_levels():
-    """Verify the same sentence with different thinking levels maps to different keys"""
-    assert build_explain_key("Hello.", "zh", "low") != build_explain_key("Hello.", "zh", "high")
-    assert build_explain_key("Hello.", "zh") == build_explain_key("Hello.", "zh", "medium")
+def test_production_configuration_fails_closed(monkeypatch):
+    from app.config import Settings
+
+    monkeypatch.setattr(Settings, "APP_ENV", "production")
+    monkeypatch.setattr(Settings, "COPILOT_AUTH_MODE", "development")
+    monkeypatch.setattr(Settings, "REDIS_URL", "")
+    with pytest.raises(ValueError, match="trusted_proxy"):
+        Settings()
 
 
-def test_call_text_model_uses_interactions_api():
-    """Verify the text path uses Interactions API with thinking_level generation config"""
-    import asyncio
-    from types import SimpleNamespace
-    from app.config import settings
+def test_generate_calls_gateway_with_structured_messages():
     from app.services import explain_service
-    from app.services.explain_service import generate_explanation_text
 
-    create_mock = AsyncMock(return_value=SimpleNamespace(output_text="  explained text  "))
-    stub_client = SimpleNamespace(close=Mock(), aio=SimpleNamespace(aclose=AsyncMock(), interactions=SimpleNamespace(create=create_mock)))
+    async def run():
+        with patch.object(explain_service, "complete", new_callable=AsyncMock) as complete_mock:
+            complete_mock.return_value = generated()
+            result = await explain_service.generate_explanation_text(
+                "Hi.", "en", "deepseek-flash", "direct"
+            )
+            messages = complete_mock.call_args.args[2]
+            assert messages[0]["role"] == "system"
+            assert messages[1] == {"role": "user", "content": "请讲解下面这句话：\nHi."}
+            assert "internal reasoning" in messages[0]["content"]
+            return result
 
-    async def _run():
-        with patch.object(explain_service, "resolve_text_client", return_value=stub_client):
-            return await generate_explanation_text("Hi.", "zh", api_key="k", thinking_level="high")
-
-    assert asyncio.run(_run()) == "explained text"
-    create_mock.assert_awaited_once()
-    kwargs = create_mock.call_args[1]
-    assert kwargs["model"] == settings.GEMINI_TEXT_MODEL
-    assert "Hi." in kwargs["input"]
-    assert kwargs["generation_config"] == {"thinking_level": "high"}
-
-
-def test_call_text_model_empty_output():
-    """Verify empty model output surfaces as an upstream error"""
-    import asyncio
-    from types import SimpleNamespace
-    from app.services import explain_service
-    from app.services.explain_service import generate_explanation_text
-
-    create_mock = AsyncMock(return_value=SimpleNamespace(output_text="   "))
-    stub_client = SimpleNamespace(close=Mock(), aio=SimpleNamespace(aclose=AsyncMock(), interactions=SimpleNamespace(create=create_mock)))
-
-    async def _run():
-        with patch.object(explain_service, "resolve_text_client", return_value=stub_client):
-            await generate_explanation_text("Hi.", "zh", api_key="k")
-
-    with pytest.raises(TTSUpstreamError):
-        asyncio.run(_run())
+    assert asyncio.run(run())[0].content
