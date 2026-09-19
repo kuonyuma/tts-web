@@ -4,10 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TTS Web - 日语语音工作室</title>
-  <link rel="stylesheet" href="style.css?v=20260907-layout-fit" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=20260915-multimodel-copilot" />
 </head>
 <body>
   <!-- Sakura Atmospheric Hanging Branches & Drifting Petals -->
@@ -95,7 +92,6 @@
           <span class="ambient-field ambient-field-left"></span>
           <span class="ambient-field ambient-field-right"></span>
         </div>
-        <span class="workspace-seam" aria-hidden="true"></span>
         <section class="work-left" aria-label="语音生成工作区">
         <!-- Workspace Header (Title & Sakura Icon) -->
         <div class="workspace-header">
@@ -274,6 +270,21 @@
         </div>
         </section>
 
+        <div
+          id="workspaceSplitter"
+          class="workspace-seam"
+          role="separator"
+          aria-label="调整语音与 AI 窗口宽度"
+          aria-orientation="vertical"
+          aria-valuemin="30"
+          aria-valuemax="75"
+          aria-valuenow="57"
+          tabindex="0"
+          title="左右拖动调整窗口宽度"
+        >
+          <span class="workspace-seam-handle" aria-hidden="true"></span>
+        </div>
+
         <!-- AI Explanation Panel -->
         <section class="work-right explain-section" id="explainSection" aria-label="AI Reading Copilot">
           <div class="explain-header">
@@ -295,25 +306,14 @@
                 <option value="ja">日语解说</option>
                 <option value="en">英文解说</option>
               </select>
+              <select id="explainModelSelect" class="explain-lang-select" aria-label="AI 模型" title="AI 模型">
+                <option value="">正在加载模型…</option>
+              </select>
               <select id="explainThinkingSelect" class="explain-lang-select" aria-label="解说深度" title="解说深度">
-                <option value="low">简洁</option>
-                <option value="medium">标准</option>
-                <option value="high">深入</option>
+                <option value="">正在加载档位…</option>
               </select>
               <button id="explainRetryBtn" class="explain-retry-btn" type="button" title="重新生成当前句子的解说">重新解说</button>
             </div>
-          </div>
-          <div
-            class="explain-sync-strip"
-            id="explainSyncStrip"
-            title="右侧会针对这段文本生成翻译、语法和词汇分析"
-          >
-            <span class="explain-sync-icon" aria-hidden="true">↔</span>
-            <div class="explain-sync-copy">
-              <span class="explain-sync-label">讲解对象 · 跟随左侧输入</span>
-              <span id="explainCurrentText" class="explain-current-text">等待输入文本</span>
-            </div>
-            <span id="explainSyncStatus" class="explain-sync-status">等待输入</span>
           </div>
           <div class="explain-messages" id="explainMessages">
             <div class="explain-empty-card" id="explainEmptyCard">
@@ -629,7 +629,7 @@
 
           <p class="modal-desc">
             <strong>Edge TTS</strong> 免费且无需 API Key，可以直接生成多语言语音。<br />
-            如果要使用高品质的 <strong>Gemini TTS</strong> 或 <strong>AI Reading Copilot</strong>，请配置你自己的 Google Gemini API Key。
+            如果要使用高品质的 <strong>Gemini TTS</strong>，请配置你自己的 Google Gemini API Key。AI Reading Copilot 使用服务端托管的模型，不读取此 Key。
           </p>
 
           <div class="form-field">
@@ -674,6 +674,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260907-left-history"></script>
+  <script src="app.js?v=20260915-multimodel-copilot"></script>
 </body>
 </html>

@@ -12,6 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const errorMessage = document.getElementById("errorMessage");
   const errorCloseBtn = document.getElementById("errorCloseBtn");
   const workspace = document.querySelector(".workspace");
+  const workspaceSplitter = document.getElementById("workspaceSplitter");
   const syncStatus = document.getElementById("syncStatus");
   const samplePrompts = document.querySelectorAll(".sample-chip");
 
@@ -62,6 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // AI Explanation (Agent) Elements & State
   const explainToggle = document.getElementById("explainToggle");
   const explainLangSelect = document.getElementById("explainLangSelect");
+  const explainModelSelect = document.getElementById("explainModelSelect");
   const explainThinkingSelect = document.getElementById("explainThinkingSelect");
   const explainSection = document.getElementById("explainSection");
   const explainMessages = document.getElementById("explainMessages");
@@ -69,29 +71,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const explainRetryBtn = document.getElementById("explainRetryBtn");
   const explainChatInput = document.getElementById("explainChatInput");
   const explainSendBtn = document.getElementById("explainSendBtn");
-  const explainCurrentText = document.getElementById("explainCurrentText");
-  const explainSyncStatus = document.getElementById("explainSyncStatus");
 
   const EXPLAIN_LANG_NAMES = { zh: "中文", ja: "日语", en: "英语" };
-  const EXPLAIN_THINKING_LEVELS = ["low", "medium", "high"];
-  const EXPLAIN_STATUS_LABELS = {
-    idle: "等待输入",
-    draft: "待生成语音",
-    generating: "正在分析",
-    linked: "跟随左侧",
-    playing: "跟随播放",
-    dirty: "左侧已修改",
-    error: "等待重试",
-  };
+  let availableCopilotModels = [];
   // Toggle defaults to ON; only an explicit "0" disables it.
   let explainEnabled = localStorage.getItem("tts_explain_enabled") !== "0";
   let explainLang = localStorage.getItem("tts_explain_lang") || "zh";
   if (!EXPLAIN_LANG_NAMES[explainLang]) explainLang = "zh";
-  let explainThinking = localStorage.getItem("tts_explain_thinking") || "medium";
-  if (!EXPLAIN_THINKING_LEVELS.includes(explainThinking)) explainThinking = "medium";
+  let explainModel = localStorage.getItem("tts_explain_model") || "";
+  let explainThinking = localStorage.getItem("tts_explain_mode") || "";
   let currentExplainKey = null;
   let currentExplainText = null;
   let currentExplainLang = null;
+  let currentExplainModel = null;
   let currentExplainThinking = null;
   let explainLoading = false;
   let chatPending = false;
@@ -130,6 +122,16 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeAudioText = "";
   let activeAudioEngine = null;
   let activeAudioVoice = null;
+
+  const WORKSPACE_SPLIT_STORAGE_KEY = "tts_workspace_split_ratio";
+  const DEFAULT_WORKSPACE_SPLIT = 0.565;
+  const MIN_WORKSPACE_SPLIT = 0.3;
+  const MAX_WORKSPACE_SPLIT = 0.75;
+  const MIN_LEFT_PANE_WIDTH = 360;
+  const MIN_RIGHT_PANE_WIDTH = 340;
+  const workspaceSplitMedia = window.matchMedia("(min-width: 961px)");
+  let workspaceSplitRatio = DEFAULT_WORKSPACE_SPLIT;
+  let activeSplitterPointerId = null;
 
   let availableEngines = [];
 
@@ -175,14 +177,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function updateSharedTextPreview(text) {
-    const value = (text || "").trim();
-    if (explainCurrentText) {
-      explainCurrentText.textContent = value ? truncateText(value.replace(/\s+/g, " "), 72) : "等待输入文本";
-      explainCurrentText.title = value;
-    }
-  }
-
   function isAudioConfigDirty() {
     return Boolean(
       activeAudioText &&
@@ -193,12 +187,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function isDraftDirty() {
     return Boolean(activeAudioText && (draftText !== activeAudioText || isAudioConfigDirty()));
-  }
-
-  function setExplainSyncStatus(state, text) {
-    if (!explainSyncStatus) return;
-    explainSyncStatus.className = `explain-sync-status ${state === "idle" ? "" : `is-${state}`}`.trim();
-    explainSyncStatus.textContent = text;
   }
 
   function hasActiveFusionWork() {
@@ -254,14 +242,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 160);
   }
 
-  function setWorkspaceState(state, text = null) {
+  function setWorkspaceState(state) {
     workspaceState = state;
     if (workspace) {
       workspace.dataset.state = state;
     }
-    const previewText = text !== null ? text : draftText || activeAudioText;
-    updateSharedTextPreview(previewText);
-
     const editorStatus = {
       idle: "等待一句话",
       draft: "待生成",
@@ -271,13 +256,10 @@ document.addEventListener("DOMContentLoaded", () => {
       dirty: "需要重新生成",
       error: "生成失败",
     }[state] || "等待一句话";
-    const explainStatus = EXPLAIN_STATUS_LABELS[state] || "等待输入";
-
     if (syncStatus) {
       syncStatus.className = `sync-status ${state === "idle" ? "is-idle" : `is-${state}`}`;
       syncStatus.innerHTML = `<span class="sync-status-dot" aria-hidden="true"></span>${editorStatus}`;
     }
-    setExplainSyncStatus(state, explainStatus);
   }
 
   function refreshWorkspaceState() {
@@ -287,14 +269,14 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     if (audioPlayer?.src && !audioPlayer.paused && !audioPlayer.ended) {
-      setWorkspaceState("playing", activeAudioText);
+      setWorkspaceState("playing");
       return;
     }
     if (activeAudioText) {
-      setWorkspaceState("linked", activeAudioText);
+      setWorkspaceState("linked");
       return;
     }
-    setWorkspaceState(draftText ? "draft" : "idle", draftText);
+    setWorkspaceState(draftText ? "draft" : "idle");
   }
 
   function syncDraftState() {
@@ -304,6 +286,127 @@ document.addEventListener("DOMContentLoaded", () => {
       currentExplainKey = null;
     }
     refreshWorkspaceState();
+  }
+
+  function clampWorkspaceSplit(ratio, min = MIN_WORKSPACE_SPLIT, max = MAX_WORKSPACE_SPLIT) {
+    return Math.min(max, Math.max(min, ratio));
+  }
+
+  function applyWorkspaceSplit(ratio, persist = false) {
+    if (!workspace || !workspaceSplitter) return;
+    workspaceSplitRatio = clampWorkspaceSplit(ratio);
+    workspace.style.setProperty("--workspace-left-track", `${workspaceSplitRatio}fr`);
+    workspace.style.setProperty("--workspace-right-track", `${1 - workspaceSplitRatio}fr`);
+    const percentage = Math.round(workspaceSplitRatio * 100);
+    workspaceSplitter.setAttribute("aria-valuenow", String(percentage));
+    workspaceSplitter.setAttribute("aria-valuetext", `左侧 ${percentage}%，右侧 ${100 - percentage}%`);
+    if (persist) {
+      localStorage.setItem(WORKSPACE_SPLIT_STORAGE_KEY, workspaceSplitRatio.toFixed(3));
+    }
+  }
+
+  function getWorkspaceSplitGeometry() {
+    if (!workspace || !workspaceSplitter) return null;
+    const workspaceRect = workspace.getBoundingClientRect();
+    const splitterRect = workspaceSplitter.getBoundingClientRect();
+    const styles = getComputedStyle(workspace);
+    const numberValue = (value) => Number.parseFloat(value) || 0;
+    const borderLeft = numberValue(styles.borderLeftWidth);
+    const borderRight = numberValue(styles.borderRightWidth);
+    const paddingLeft = numberValue(styles.paddingLeft);
+    const paddingRight = numberValue(styles.paddingRight);
+    const gap = numberValue(styles.columnGap);
+    const contentLeft = workspaceRect.left + borderLeft + paddingLeft;
+    const contentWidth =
+      workspaceRect.width - borderLeft - borderRight - paddingLeft - paddingRight;
+    const paneWidth = contentWidth - splitterRect.width - gap * 2;
+    if (paneWidth <= 0) return null;
+
+    let minimumRatio = Math.max(MIN_WORKSPACE_SPLIT, MIN_LEFT_PANE_WIDTH / paneWidth);
+    let maximumRatio = Math.min(MAX_WORKSPACE_SPLIT, 1 - MIN_RIGHT_PANE_WIDTH / paneWidth);
+    if (minimumRatio > maximumRatio) {
+      const midpoint = clampWorkspaceSplit((minimumRatio + maximumRatio) / 2);
+      minimumRatio = midpoint;
+      maximumRatio = midpoint;
+    }
+    return {
+      contentLeft,
+      gap,
+      splitterWidth: splitterRect.width,
+      paneWidth,
+      minimumRatio,
+      maximumRatio,
+    };
+  }
+
+  function resizeWorkspaceFromPointer(clientX) {
+    const geometry = getWorkspaceSplitGeometry();
+    if (!geometry) return;
+    const leftPaneWidth =
+      clientX - geometry.contentLeft - geometry.gap - geometry.splitterWidth / 2;
+    const ratio = clampWorkspaceSplit(
+      leftPaneWidth / geometry.paneWidth,
+      geometry.minimumRatio,
+      geometry.maximumRatio
+    );
+    applyWorkspaceSplit(ratio);
+  }
+
+  function finishWorkspaceResize(event) {
+    if (activeSplitterPointerId === null) return;
+    if (event?.pointerId !== undefined && event.pointerId !== activeSplitterPointerId) return;
+    const pointerId = activeSplitterPointerId;
+    activeSplitterPointerId = null;
+    workspaceSplitter?.classList.remove("is-dragging");
+    document.body.classList.remove("workspace-resizing");
+    applyWorkspaceSplit(workspaceSplitRatio, true);
+    if (workspaceSplitter?.hasPointerCapture(pointerId)) {
+      workspaceSplitter.releasePointerCapture(pointerId);
+    }
+  }
+
+  function initWorkspaceSplitter() {
+    if (!workspace || !workspaceSplitter) return;
+    const savedRatio = Number.parseFloat(localStorage.getItem(WORKSPACE_SPLIT_STORAGE_KEY));
+    applyWorkspaceSplit(Number.isFinite(savedRatio) ? savedRatio : DEFAULT_WORKSPACE_SPLIT);
+
+    workspaceSplitter.addEventListener("pointerdown", (event) => {
+      if (!workspaceSplitMedia.matches || event.button !== 0) return;
+      event.preventDefault();
+      activeSplitterPointerId = event.pointerId;
+      workspaceSplitter.setPointerCapture(event.pointerId);
+      workspaceSplitter.classList.add("is-dragging");
+      document.body.classList.add("workspace-resizing");
+      resizeWorkspaceFromPointer(event.clientX);
+    });
+
+    workspaceSplitter.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== activeSplitterPointerId) return;
+      resizeWorkspaceFromPointer(event.clientX);
+    });
+    workspaceSplitter.addEventListener("pointerup", finishWorkspaceResize);
+    workspaceSplitter.addEventListener("pointercancel", finishWorkspaceResize);
+    workspaceSplitter.addEventListener("lostpointercapture", finishWorkspaceResize);
+
+    workspaceSplitter.addEventListener("keydown", (event) => {
+      const step = event.shiftKey ? 0.05 : 0.02;
+      let nextRatio = workspaceSplitRatio;
+      if (event.key === "ArrowLeft") nextRatio -= step;
+      else if (event.key === "ArrowRight") nextRatio += step;
+      else if (event.key === "Home") nextRatio = MIN_WORKSPACE_SPLIT;
+      else if (event.key === "End") nextRatio = MAX_WORKSPACE_SPLIT;
+      else return;
+      event.preventDefault();
+      applyWorkspaceSplit(nextRatio, true);
+    });
+
+    workspaceSplitter.addEventListener("dblclick", () => {
+      applyWorkspaceSplit(DEFAULT_WORKSPACE_SPLIT, true);
+    });
+
+    workspaceSplitMedia.addEventListener("change", () => {
+      if (!workspaceSplitMedia.matches) finishWorkspaceResize();
+    });
   }
 
   function localizeErrorMessage(detail, fallback) {
@@ -521,7 +624,7 @@ document.addEventListener("DOMContentLoaded", () => {
     textInput.value = "";
     updateCharCount();
     draftText = "";
-    setWorkspaceState("idle", "");
+    setWorkspaceState("idle");
     updateSentencePreview();
     if (errorAlert) errorAlert.style.display = "none";
     textInput.focus();
@@ -995,8 +1098,6 @@ document.addEventListener("DOMContentLoaded", () => {
     activeAudioText = metadata.text || activeAudioText || draftText;
     activeAudioEngine = resolvedEngine;
     activeAudioVoice = resolvedVoice;
-    updateSharedTextPreview(activeAudioText);
-
     stopSentenceSync();
     setActiveSentence(-1);
 
@@ -1130,8 +1231,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     startSentenceSync();
     refreshWorkspaceState();
-    const explainState = workspaceState === "dirty" ? "dirty" : explainLoading ? "generating" : "playing";
-    setExplainSyncStatus(explainState, EXPLAIN_STATUS_LABELS[explainState]);
     updateHistoryPlayingState();
     updateWaveformProgress();
   });
@@ -1602,16 +1701,78 @@ document.addEventListener("DOMContentLoaded", () => {
   // to explain it (fire-and-forget, never blocks playback). Replaying a
   // sentence loads its stored explanation + follow-up history read-only.
 
+  function selectedCopilotModel() {
+    return availableCopilotModels.find((model) => model.id === explainModel) || null;
+  }
+
+  function populateReasoningModes(preferredMode = "") {
+    const model = selectedCopilotModel();
+    if (!explainThinkingSelect) return;
+    explainThinkingSelect.replaceChildren();
+    (model?.modes || []).forEach((mode) => {
+      const option = document.createElement("option");
+      option.value = mode.id;
+      option.textContent = mode.name;
+      option.title = mode.description || mode.name;
+      explainThinkingSelect.appendChild(option);
+    });
+    const supported = model?.modes?.some((mode) => mode.id === preferredMode);
+    explainThinking = supported ? preferredMode : (model?.modes?.[0]?.id || "");
+    explainThinkingSelect.value = explainThinking;
+    explainThinkingSelect.disabled = !model;
+    if (explainThinking) localStorage.setItem("tts_explain_mode", explainThinking);
+  }
+
+  async function loadCopilotModels() {
+    try {
+      const response = await apiFetch("/api/copilot/models", {
+        headers: { "X-Client-ID": getClientId() },
+      });
+      if (!response.ok) throw new Error("model catalog unavailable");
+      const data = await response.json();
+      availableCopilotModels = Array.isArray(data.models) ? data.models : [];
+    } catch (error) {
+      console.error("Copilot catalog error:", error);
+      availableCopilotModels = [];
+    }
+
+    if (explainModelSelect) {
+      explainModelSelect.replaceChildren();
+      availableCopilotModels.forEach((model) => {
+        const option = document.createElement("option");
+        option.value = model.id;
+        option.textContent = model.name;
+        explainModelSelect.appendChild(option);
+      });
+    }
+    const preferred = availableCopilotModels.find((model) => model.id === explainModel);
+    const fallback = availableCopilotModels.find((model) => model.default) || availableCopilotModels[0];
+    explainModel = (preferred || fallback)?.id || "";
+    if (explainModelSelect) {
+      explainModelSelect.value = explainModel;
+      explainModelSelect.disabled = !explainModel;
+    }
+    if (explainModel) localStorage.setItem("tts_explain_model", explainModel);
+    populateReasoningModes(explainThinking);
+
+    const available = !!explainModel;
+    if (!available) {
+      explainEnabled = false;
+      if (explainToggle) {
+        explainToggle.checked = false;
+        explainToggle.disabled = true;
+        explainToggle.title = "AI 讲解服务暂未配置";
+      }
+      renderExplainEmpty();
+    }
+    updateExplainInputState();
+  }
+
   function getExplainHeaders() {
-    const headers = {
+    return {
       "Content-Type": "application/json",
       "X-Client-ID": getClientId(),
     };
-    const userKey = localStorage.getItem("tts_gemini_api_key");
-    if (userKey && userKey.trim()) {
-      headers["X-Gemini-Api-Key"] = userKey.trim();
-    }
-    return headers;
   }
 
   function updateExplainLangBadge() {
@@ -1627,7 +1788,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateExplainInputState() {
-    const busy = explainLoading || chatPending;
+    const busy = explainLoading || chatPending || !explainModel;
     if (explainSendBtn) explainSendBtn.disabled = busy;
     if (explainChatInput) explainChatInput.disabled = busy;
     if (explainRetryBtn) explainRetryBtn.disabled = busy;
@@ -1714,10 +1875,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // The right panel is permanent: "hiding" means showing the empty state.
     currentExplainKey = null;
     renderExplainEmpty();
-    setExplainSyncStatus(
-      explainEnabled ? workspaceState : "idle",
-      explainEnabled ? (EXPLAIN_STATUS_LABELS[workspaceState] || "等待输入") : "AI 已关闭"
-    );
   }
 
   function formatInlineMarkdown(text) {
@@ -1963,33 +2120,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function requestExplanation(text, opts = {}) {
     const manual = !!opts.manual;
-    if (!explainEnabled && !manual) return;
+    if ((!explainEnabled && !manual) || !explainModel || !explainThinking) return;
     const lang = explainLang;
+    const model = explainModel;
     const thinking = explainThinking;
     // Replaying audio must not reset the matching explanation or its reveal.
     const sameExplanation =
       currentExplainText === text &&
       currentExplainLang === lang &&
+      currentExplainModel === model &&
       currentExplainThinking === thinking;
     if (!manual && sameExplanation && (currentExplainKey || explainLoading)) return;
 
     currentExplainText = text;
     currentExplainLang = lang;
+    currentExplainModel = model;
     currentExplainThinking = thinking;
     currentExplainKey = null;
     updateExplainLangBadge();
-    updateSharedTextPreview(text);
     openExplainSection();
     showExplainLoading();
     explainLoading = true;
     refreshFusionState();
-    setExplainSyncStatus("generating", "正在生成解说");
     updateExplainInputState();
     try {
       const response = await apiFetch("/api/explain", {
         method: "POST",
         headers: getExplainHeaders(),
-        body: JSON.stringify({ text, lang, thinking_level: thinking }),
+        body: JSON.stringify({ text, lang, model_id: model, mode_id: thinking }),
       });
       if (!response.ok) {
         let detail = "解说生成失败，请重试。";
@@ -1999,9 +2157,6 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch {
           // keep default message
         }
-        if (response.status === 400 && detail.includes("API Key")) {
-          openSettingsModal();
-        }
         throw new Error(localizeErrorMessage(detail, "解说生成失败，请重试。"));
       }
       const data = await response.json();
@@ -2009,17 +2164,18 @@ document.addEventListener("DOMContentLoaded", () => {
       if (
         currentExplainText !== text ||
         currentExplainLang !== lang ||
+        currentExplainModel !== model ||
         currentExplainThinking !== thinking
       )
         return;
       currentExplainKey = data.explain_key;
-      if (!data.cached) setExplainSyncStatus("generating", "正在呈现解说");
       await renderExplainMessages(data.explanation, data.messages, { stream: !data.cached });
     } catch (err) {
       console.error("Explain request error:", err);
       if (
         currentExplainText !== text ||
         currentExplainLang !== lang ||
+        currentExplainModel !== model ||
         currentExplainThinking !== thinking
       )
         return;
@@ -2027,30 +2183,27 @@ document.addEventListener("DOMContentLoaded", () => {
     } finally {
       explainLoading = false;
       refreshFusionState();
-      if (currentExplainText === text) {
-        const syncState = isDraftDirty() ? "dirty" : audioPlayer?.paused ? "linked" : "playing";
-        setExplainSyncStatus(syncState, EXPLAIN_STATUS_LABELS[syncState]);
-      }
       updateExplainInputState();
     }
   }
 
   async function loadExplanationForReplay(text) {
     const lang = explainLang;
+    const model = explainModel;
     const thinking = explainThinking;
+    if (!model || !thinking) return;
     currentExplainText = text;
     currentExplainLang = lang;
+    currentExplainModel = model;
     currentExplainThinking = thinking;
     currentExplainKey = null;
     updateExplainLangBadge();
-    updateSharedTextPreview(text);
-    setExplainSyncStatus("generating", "正在加载解说");
     explainLoading = true;
     refreshFusionState();
     updateExplainInputState();
     try {
       const response = await apiFetch(
-        `/api/explain?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(lang)}&thinking=${encodeURIComponent(thinking)}`,
+        `/api/explain?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(lang)}&model_id=${encodeURIComponent(model)}&mode_id=${encodeURIComponent(thinking)}`,
         { headers: { "X-Client-ID": getClientId() } }
       );
       if (!response.ok) {
@@ -2061,14 +2214,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (
         currentExplainText !== text ||
         currentExplainLang !== lang ||
+        currentExplainModel !== model ||
         currentExplainThinking !== thinking
       )
         return;
       currentExplainKey = data.explain_key;
       openExplainSection();
       await renderExplainMessages(data.explanation, data.messages);
-      const syncState = isDraftDirty() ? "dirty" : "linked";
-      setExplainSyncStatus(syncState, EXPLAIN_STATUS_LABELS[syncState]);
     } catch (err) {
       console.error("Explain fetch error:", err);
       hideExplainSection();
@@ -2099,7 +2251,7 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({
           explain_key: currentExplainKey,
           message,
-          thinking_level: explainThinking,
+          mode_id: explainThinking,
         }),
       });
       if (!response.ok) {
@@ -2110,13 +2262,9 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch {
           // keep default message
         }
-        if (response.status === 400 && detail.includes("API Key")) {
-          openSettingsModal();
-        }
         throw new Error(localizeErrorMessage(detail, "发送失败，请重试。"));
       }
       const data = await response.json();
-      setExplainSyncStatus("generating", "正在呈现回答");
       await streamExplainBubble(data.answer);
     } catch (err) {
       console.error("Explain chat error:", err);
@@ -2135,12 +2283,11 @@ document.addEventListener("DOMContentLoaded", () => {
         explainEnabled = explainToggle.checked;
         localStorage.setItem("tts_explain_enabled", explainEnabled ? "1" : "0");
         if (explainEnabled) {
-          if (currentExplainText) {
-            requestExplanation(currentExplainText, { manual: true });
-          }
+          renderExplainEmpty();
         } else {
           hideExplainSection();
         }
+        updateExplainInputState();
       });
     }
     if (explainLangSelect) {
@@ -2154,13 +2301,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
+    if (explainModelSelect) {
+      explainModelSelect.addEventListener("change", () => {
+        explainModel = explainModelSelect.value;
+        localStorage.setItem("tts_explain_model", explainModel);
+        populateReasoningModes("");
+        currentExplainKey = null;
+        currentExplainModel = null;
+      });
+    }
     if (explainThinkingSelect) {
-      explainThinkingSelect.value = explainThinking;
       explainThinkingSelect.addEventListener("change", () => {
         const v = explainThinkingSelect.value;
-        if (EXPLAIN_THINKING_LEVELS.includes(v)) {
+        if (selectedCopilotModel()?.modes?.some((mode) => mode.id === v)) {
           explainThinking = v;
-          localStorage.setItem("tts_explain_thinking", v);
+          localStorage.setItem("tts_explain_mode", v);
+          currentExplainKey = null;
         }
       });
     }
@@ -2297,7 +2453,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const thisRequestId = ++ttsRequestId;
     draftText = text;
-    setWorkspaceState("generating", text);
+    setWorkspaceState("generating");
     setLoading(true);
     ttsPending = true;
     refreshFusionState();
@@ -2412,7 +2568,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (thisRequestId !== ttsRequestId) return;
       console.error("TTS request error:", err);
       showError(err.message || "音频生成失败，请重试。");
-      setWorkspaceState("error", text);
+      setWorkspaceState("error");
     } finally {
       if (thisRequestId === ttsRequestId) {
         setLoading(false);
@@ -2506,9 +2662,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   syncSidebarLayout();
   initThemeSelector();
+  initWorkspaceSplitter();
   document.body.classList.add("motion-enabled");
   draftText = textInput.value.trim();
-  setWorkspaceState("idle", draftText);
+  setWorkspaceState("idle");
   updateCharCount();
   if (draftText) {
     updateSentencePreview();
@@ -2517,6 +2674,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateWaveformProgress();
   updateKeyBadge();
   initExplainControls();
+  loadCopilotModels();
   loadEngines();
   loadHistory();
 });

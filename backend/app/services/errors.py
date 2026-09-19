@@ -26,6 +26,46 @@ class StorageFullError(Exception):
     pass
 
 
+class LLMException(Exception):
+    """Sanitized Copilot provider failure."""
+
+
+class LLMConfigError(LLMException):
+    pass
+
+
+class LLMTimeoutError(LLMException):
+    pass
+
+
+class LLMBusyError(LLMException):
+    pass
+
+
+class LLMUpstreamError(LLMException):
+    def __init__(self, status_code: int):
+        super().__init__("Copilot provider request failed")
+        self.status_code = status_code
+
+
+def llm_provider_error(exc: Exception, provider: str) -> LLMException:
+    """Map provider failures without exposing response bodies, URLs or credentials."""
+    if isinstance(exc, LLMException):
+        return exc
+    timeout = isinstance(exc, (TimeoutError, httpx.TimeoutException))
+    code = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+    if not isinstance(code, int) or not 400 <= code <= 599:
+        code = None
+    logger.warning("LLM provider failure provider=%s type=%s status=%s", provider, type(exc).__name__, code)
+    if timeout:
+        return LLMTimeoutError("AI 讲解服务请求超时，请稍后重试。")
+    if code:
+        return LLMUpstreamError(code)
+    if isinstance(exc, (httpx.TransportError, OSError)):
+        return LLMException("连接 AI 讲解服务失败，请稍后重试。")
+    return LLMUpstreamError(502)
+
+
 class TTSUpstreamError(TTSException):
     def __init__(self, status_code: int, detail: str = "Provider request failed"):
         super().__init__(f"Upstream TTS error {status_code}")

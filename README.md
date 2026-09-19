@@ -16,6 +16,10 @@
 
 It provides an out-of-the-box dual-engine architecture: completely free and keyless **Microsoft Edge TTS** (supporting Japanese, Chinese, English, etc.), alongside high-fidelity **Google Gemini 2.5 Flash TTS** with a client-side **Bring Your Own Key (BYOK)** security design.
 
+AI Reading Copilot is a separate, server-funded multi-model feature. Its browser model and
+model-specific reasoning selectors are driven by a backend allowlist; browser-supplied LLM keys are
+never accepted. See [COPILOT_DEPLOYMENT.md](COPILOT_DEPLOYMENT.md) before enabling it publicly.
+
 ---
 
 ## ✨ Key Features

@@ -14,6 +14,7 @@ const chromePath = process.env.CHROME_PATH || [
 assert(chromePath, 'Chrome/Chromium is required; set CHROME_PATH');
 
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-theme-test-'));
+let explainRequestCount = 0;
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -27,6 +28,25 @@ const server = http.createServer(async (req, res) => {
     voices: [{ id: 'ja-JP-NanamiNeural', name: 'Nanami' }],
   }]);
   if (url.pathname === '/api/history') return json([]);
+  if (url.pathname === '/api/copilot/models') return json({ models: [{
+    id: 'deepseek-flash', name: 'DeepSeek Flash', default: true,
+    modes: [
+      { id: 'direct', name: '直接回答', description: '速度优先', quota_weight: 1 },
+      { id: 'deep', name: '深度思考', description: '复杂长句', quota_weight: 5 },
+    ],
+  }] });
+  if (url.pathname === '/api/tts/flow' && req.method === 'POST') return json({
+    cache_key: 'test-audio', engine: 'edge', voice: 'ja-JP-NanamiNeural',
+    timeline_available: false, sentences: [], audio_url: '/api/audio/test-audio',
+  });
+  if (url.pathname === '/api/audio/test-audio') {
+    res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
+    return res.end(Buffer.from([0x49, 0x44, 0x33]));
+  }
+  if (url.pathname === '/api/explain') {
+    explainRequestCount += 1;
+    return json({ detail: 'Gemini 服务需要 API Key。' }, 400);
+  }
   const file = { '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css' }[url.pathname];
   if (file) {
     res.writeHead(200, { 'Content-Type': file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
@@ -90,6 +110,7 @@ let browserExit;
 
     await send('Runtime.enable');
     await send('Page.enable');
+    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     await send('Page.navigate', { url });
 
     await wait('document.readyState === "complete"');
@@ -102,28 +123,57 @@ let browserExit;
     assert.equal(inCopilot, false, 'Copilot header must not contain a settings button');
     console.log('PASS settings button moved from copilot to sidebar');
 
+    const copilotControls = await evaluate('({ model: document.getElementById("explainModelSelect").value, modes: Array.from(document.getElementById("explainThinkingSelect").options).map(o => o.value) })');
+    assert.equal(copilotControls.model, 'deepseek-flash');
+    assert.deepEqual(copilotControls.modes, ['direct', 'deep']);
+    console.log('PASS Copilot model catalog drives model-specific reasoning modes');
+
     // 2. Verify history remains collapsed until the user opens it
     assert.equal(await evaluate('document.getElementById("historySection").classList.contains("open")'), false);
     console.log('PASS history sidebar defaults to collapsed');
 
-    // 3. Verify initial theme is sakura
+    // 3. Verify the workspace splitter resizes and persists the two panes
+    const initialSplit = await evaluate('Number(document.getElementById("workspaceSplitter").getAttribute("aria-valuenow"))');
+    const splitterBounds = await evaluate('(() => { const r = document.getElementById("workspaceSplitter").getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()');
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: splitterBounds.x, y: splitterBounds.y, button: 'left', clickCount: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: splitterBounds.x + 90, y: splitterBounds.y, button: 'left', buttons: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: splitterBounds.x + 90, y: splitterBounds.y, button: 'left', clickCount: 1 });
+    const resizedSplit = await evaluate('Number(document.getElementById("workspaceSplitter").getAttribute("aria-valuenow"))');
+    assert(resizedSplit > initialSplit, 'Dragging right should increase the left pane width');
+    assert.equal(await evaluate('Boolean(localStorage.getItem("tts_workspace_split_ratio"))'), true);
+    console.log('PASS workspace splitter resizes and persists pane widths');
+
+    // 4. Enabling AI explanation must not request AI or open settings
+    await evaluate('document.getElementById("explainToggle").click()');
+    await evaluate('document.getElementById("textInput").value = "Text waiting for optional AI explanation"');
+    await evaluate('document.getElementById("generateBtn").click()');
+    await wait('document.getElementById("generateBtn").disabled === false');
+    assert.equal(await evaluate('document.getElementById("settingsModal").style.display'), 'none');
+    assert.equal(explainRequestCount, 0);
+    await evaluate('document.getElementById("explainToggle").click()');
+    await delay(100);
+    assert.equal(await evaluate('document.getElementById("settingsModal").style.display'), 'none');
+    assert.equal(explainRequestCount, 0);
+    console.log('PASS enabling AI explanation does not request AI or open settings');
+
+    // 5. Verify initial theme is sakura
     const initialTheme = await evaluate('document.documentElement.getAttribute("data-theme")');
     assert.equal(initialTheme, 'sakura', 'Initial theme should default to sakura');
     const sakuraDecorVisible = await evaluate('getComputedStyle(document.getElementById("sakuraDecor")).display !== "none"');
     assert.equal(sakuraDecorVisible, true, 'Sakura decor should be visible in sakura theme');
     console.log('PASS initial theme defaults to sakura and displays atmosphere decor');
 
-    // 4. Open settings modal from sidebar settings button
+    // 6. Open settings modal from sidebar settings button
     await evaluate('document.getElementById("settingsBtn").click()');
     await wait('document.getElementById("settingsModal").style.display === "flex"');
     console.log('PASS clicking sidebar settings button opens settings modal');
 
-    // 5. Verify multi-choice theme options exist in settings modal
+    // 7. Verify multi-choice theme options exist in settings modal
     const themeButtons = await evaluate('Array.from(document.querySelectorAll("#themeOptionsGrid .theme-option-btn")).map(b => b.getAttribute("data-theme"))');
     assert.deepEqual(themeButtons.sort(), ['dark', 'default', 'sakura'].sort());
     console.log('PASS theme options (default, sakura, dark) exist in settings modal');
 
-    // 6. Switch to default theme (Classic Blue)
+    // 8. Switch to default theme (Classic Blue)
     await evaluate('document.querySelector(\'.theme-option-btn[data-theme="default"]\').click()');
     assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), 'default');
     assert.equal(await evaluate('localStorage.getItem("tts_theme")'), 'default');
@@ -131,39 +181,41 @@ let browserExit;
     assert.equal(defaultSakuraHidden, true, 'Sakura decor should be hidden in default theme');
     console.log('PASS switching to default theme works and updates localStorage');
 
-    // 7. Switch to dark theme
+    // 9. Switch to dark theme
     await evaluate('document.querySelector(\'.theme-option-btn[data-theme="dark"]\').click()');
     assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), 'dark');
     assert.equal(await evaluate('localStorage.getItem("tts_theme")'), 'dark');
     console.log('PASS switching to dark theme works and updates localStorage');
 
-    // 8. Switch back to sakura theme
+    // 10. Switch back to sakura theme
     await evaluate('document.querySelector(\'.theme-option-btn[data-theme="sakura"]\').click()');
     assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), 'sakura');
     assert.equal(await evaluate('localStorage.getItem("tts_theme")'), 'sakura');
     assert.equal(await evaluate('getComputedStyle(document.getElementById("sakuraDecor")).display !== "none"'), true);
     console.log('PASS switching back to sakura theme works');
 
-    // 9. Close settings modal
+    // 11. Close settings modal
     await evaluate('document.getElementById("modalCloseBtn").click()');
     await wait('document.getElementById("settingsModal").style.display === "none"');
     console.log('PASS closing settings modal works');
 
-    // 10. Verify New Reading is absent and Clear text still works
+    // 12. Verify New Reading is absent and Clear text still works
     assert.equal(await evaluate('Boolean(document.getElementById("newReadingBtn"))'), false);
     await evaluate('document.getElementById("textInput").value = "Testing clear reset"');
     await evaluate('document.getElementById("clearTextBtn").click()');
     assert.equal(await evaluate('document.getElementById("textInput").value'), '');
     console.log('PASS New Reading is absent and Clear text resets input');
 
-    // 11. Verify cute cat illustration in sidebar & reading banner in center
+    // 13. Verify cute cat illustration in sidebar & reading banner in center
     assert.equal(await evaluate('Boolean(document.querySelector(".sidebar-cat-card"))'), true);
     assert.equal(await evaluate('Boolean(document.querySelector(".work-reading-banner"))'), true);
     assert.equal(await evaluate('Boolean(document.querySelector(".explain-empty-card"))'), true);
-    console.log('PASS cute cat card, reading banner, and copilot empty card exist');
+    assert.equal(await evaluate('Boolean(document.querySelector(".explain-sync-strip"))'), false);
+    console.log('PASS decorative cards remain and explain sync strip is absent');
 
-    // 12. Verify mobile viewport has no horizontal overflow
+    // 14. Verify mobile viewport has no splitter or horizontal overflow
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    assert.equal(await evaluate('getComputedStyle(document.getElementById("workspaceSplitter")).display'), 'none');
     assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), true);
     console.log('PASS mobile responsive layout has no horizontal overflow');
 

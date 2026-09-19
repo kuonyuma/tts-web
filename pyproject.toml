@@ -15,6 +15,7 @@ dependencies = [
     "audioop-lts>=0.2.1",
     "cachetools>=5.3.0",
     "edge-tts>=7.2.8",
+    "redis>=5.2.0",
 ]
 
 [dependency-groups]
