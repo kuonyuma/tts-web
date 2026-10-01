@@ -3,540 +3,142 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TTS Web - 日语语音工作室</title>
-  <link rel="stylesheet" href="style.css?v=20260915-multimodel-copilot" />
+  <meta name="color-scheme" content="light dark" />
+  <title>KOTO · 语音会话</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="chat.css" />
 </head>
-<body>
-  <!-- Sakura Atmospheric Hanging Branches & Drifting Petals -->
-  <div id="sakuraDecor" class="sakura-decor" aria-hidden="true">
-    <!-- Top-Left Sakura Branch -->
-    <svg class="sakura-branch-left-svg" viewBox="0 0 240 160" width="240" height="160" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M0 0 C40 20 70 28 100 24 C130 20 155 38 175 62 C195 86 210 98 230 102" stroke="#9e717c" stroke-width="2.6" stroke-linecap="round"/>
-      <path d="M90 25 C108 40 118 58 135 72" stroke="#9e717c" stroke-width="1.6" stroke-linecap="round"/>
-      <g transform="translate(100, 24)">
-        <circle cx="-4" cy="-4" r="5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="4" cy="-4" r="5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="6" cy="2" r="5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="-1" cy="6" r="5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="-6" cy="2" r="5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="0" cy="0" r="2.5" fill="#ffb6c1"/>
-      </g>
-      <g transform="translate(140, 70)">
-        <circle cx="-3.5" cy="-3.5" r="4.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="3.5" cy="-3.5" r="4.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="5" cy="2" r="4.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="-1" cy="5" r="4.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="-5" cy="2" r="4.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.8"/>
-        <circle cx="0" cy="0" r="2" fill="#ffb6c1"/>
-      </g>
-      <circle cx="175" cy="62" r="3.5" fill="#f8bbd0" stroke="#f48fb1" stroke-width="0.8"/>
-      <circle cx="230" cy="102" r="4" fill="#f8bbd0" stroke="#f48fb1" stroke-width="0.8"/>
-    </svg>
+<body class="chat-app">
+  <div class="chat-shell">
+    <aside id="conversationSidebar" class="conversation-sidebar" aria-label="会话列表">
+      <div class="brand-row"><div class="brand-header"><a class="brand" href="./" aria-label="KOTO 语音会话"><span class="brand-mark">言</span><span class="brand-text">KOTO<small>让文字有声音</small></span></a><button id="newConversationBtn" class="new-conversation new-conversation-mini" aria-label="新建会话" title="新建会话">＋</button></div><button id="sidebarCloseBtn" class="icon-button" aria-label="收起会话栏" title="收起会话栏">‹</button></div>
 
-    <!-- Top-Right Sakura Branch -->
-    <svg class="sakura-branch-svg" viewBox="0 0 280 180" width="280" height="180" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M280 0 C240 25 210 32 180 28 C150 24 125 42 100 68 C80 92 65 106 28 112" stroke="#9e717c" stroke-width="3" stroke-linecap="round"/>
-      <path d="M190 29 C172 46 162 65 145 80" stroke="#9e717c" stroke-width="1.8" stroke-linecap="round"/>
-      <path d="M125 48 C110 52 95 56 80 48" stroke="#9e717c" stroke-width="1.6" stroke-linecap="round"/>
-      <!-- Sakura Flower 1 -->
-      <g transform="translate(182, 28)">
-        <circle cx="-5" cy="-5" r="6.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="5" cy="-5" r="6.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="7" cy="3" r="6.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="-1" cy="7" r="6.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="-7" cy="2" r="6.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="0" cy="0" r="3" fill="#ffb6c1"/>
-        <circle cx="0" cy="0" r="1.5" fill="#fff59d"/>
-      </g>
-      <!-- Sakura Flower 2 -->
-      <g transform="translate(142, 78)">
-        <circle cx="-4" cy="-4" r="5.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="4" cy="-4" r="5.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="6" cy="3" r="5.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="-1" cy="6" r="5.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="-6" cy="2" r="5.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="0" cy="0" r="2.2" fill="#ffb6c1"/>
-      </g>
-      <!-- Sakura Flower 3 -->
-      <g transform="translate(98, 64)">
-        <circle cx="-3.5" cy="-3.5" r="5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="3.5" cy="-3.5" r="5.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="5" cy="2" r="5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="-1" cy="5.5" r="5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="-5" cy="1.5" r="5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-        <circle cx="0" cy="0" r="2" fill="#ffb6c1"/>
-      </g>
-      <circle cx="30" cy="112" r="4.5" fill="#fde6ee" stroke="#f48fb1" stroke-width="0.9"/>
-      <circle cx="78" cy="46" r="4" fill="#f8bbd0" stroke="#f48fb1" stroke-width="0.9"/>
-    </svg>
-    <span class="sakura-petal sp1"></span>
-    <span class="sakura-petal sp2"></span>
-    <span class="sakura-petal sp3"></span>
-    <span class="sakura-petal sp4"></span>
-    <span class="sakura-petal sp5"></span>
-  </div>
-
-  <div class="app-layout">
-  <button id="historyBtn" class="history-toggle" type="button" aria-label="展开历史侧栏" aria-controls="historySection" aria-expanded="false" title="展开历史侧栏">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="16" rx="3"></rect>
-      <path d="M9 4v16"></path>
-    </svg>
-    <span id="headerHistoryBadge" class="header-history-badge">0</span>
-  </button>
-    <!-- Main Content Area -->
-    <div class="main-area">
-
-      <div class="workspace shared-workspace">
-        <div class="ambient-fields" aria-hidden="true">
-          <span class="ambient-field ambient-field-left"></span>
-          <span class="ambient-field ambient-field-right"></span>
-        </div>
-        <section class="work-left" aria-label="语音生成工作区">
-        <!-- Workspace Header (Title & Sakura Icon) -->
-        <div class="workspace-header">
-          <div class="workspace-header-title-row">
-            <span class="workspace-header-icon" aria-hidden="true">🌸</span>
-            <div class="workspace-header-text">
-              <h2 class="workspace-main-title">文字转语音</h2>
-              <p class="workspace-sub-title">选择引擎与音色，输入文本，即可生成自然流畅的语音</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Engine & Voice Control Bar -->
-        <div class="control-bar">
-          <div class="control-group">
-            <div class="control-label-row">
-              <label for="engineSelect" class="control-label">语音引擎</label>
-              <span id="engineBadge" class="control-badge">免费</span>
-            </div>
-            <div class="select-wrapper">
-              <select id="engineSelect" class="control-select">
-                <option value="edge">Edge TTS（免费·快速）</option>
-                <option value="gemini">Gemini TTS（高品质·需 Key）</option>
-              </select>
-            </div>
-            <span class="control-hint-text">高质量、稳定的在线语音合成</span>
-          </div>
-
-          <div class="control-group voice-group">
-            <div class="control-label-row">
-              <label for="voiceSelect" class="control-label">声音选择</label>
-            </div>
-            <div class="select-wrapper">
-              <select id="voiceSelect" class="control-select">
-                <!-- Dynamically populated -->
-              </select>
-            </div>
-            <span class="control-hint-text">温柔自然，适合日常阅读</span>
-          </div>
-        </div>
-
-        <div class="editor-section">
-          <div class="editor-top-bar">
-            <label for="textInput" class="editor-label">输入文本</label>
-            <span id="syncStatus" class="sync-status is-idle">
-              <span class="sync-status-dot" aria-hidden="true"></span>
-              等待一句话
-            </span>
-          </div>
-
-          <div class="sample-prompts" aria-label="示例文本">
-            <span class="sample-prompts-label">试试：</span>
-            <button class="sample-chip" type="button" data-sample="こんにちは。今日も良い一日をお過ごしください。">日常问候</button>
-            <button class="sample-chip" type="button" data-sample="東京へようこそ。ゆっくりと街の景色を楽しんでください。">旅行场景</button>
-            <button class="sample-chip" type="button" data-sample="え、本当に？すごい！それはとても嬉しいニュースですね。">情绪练习</button>
-            <button class="sample-chip" type="button" data-sample="本日の主要ニュースをお伝えいたします。世界経済の動向についてです。">新闻播报</button>
-            <button class="sample-chip" type="button" data-sample="むかしむかし、ある山奥に、小さな美しい花が咲いていました。">故事朗读</button>
-          </div>
-
-          <textarea
-            id="textInput"
-            class="text-input"
-            placeholder="输入想要朗读的文本。&#10;例如：こんにちは。今日も良い一日をお過ごしください。&#10;你也可以输入中文或英文进行试听。"
-            maxlength="1000"
-            rows="7"
-            spellcheck="false"
-          ></textarea>
-
-          <div class="editor-bottom-bar">
-            <div class="editor-meta">
-              <span id="charCounter" class="char-counter">0 / 1000 字</span>
-              <button id="clearTextBtn" class="clear-text-btn" type="button" aria-label="清空输入文本" title="清空文本">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-                <span>清空</span>
-              </button>
-            </div>
-
-            <div class="editor-actions">
-              <button id="generateBtn" class="generate-btn" type="button">
-                <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-                <span class="btn-voice-wave" id="btnVoiceWave" aria-hidden="true">
-                  <span></span><span></span><span></span><span></span>
-                </span>
-                <span class="btn-text" id="btnText">开始生成语音</span>
-                <span class="btn-kbd-badge" aria-hidden="true">Ctrl ↵</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div id="errorAlert" class="error-alert" role="alert" style="display: none;">
-          <svg class="error-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          <span id="errorMessage" class="error-message"></span>
-          <button id="errorCloseBtn" class="error-close-btn" type="button" aria-label="关闭提示">×</button>
-        </div>
-
-        <!-- Sentence Flow Display (One sentence per line + synchronized highlight) -->
-        <section id="sentenceFlow" class="sentence-flow" hidden>
-          <div id="sentenceList" class="sentence-list" role="region" aria-label="句子朗读列表"></div>
-        </section>
-
-        <!-- Custom Audio Player -->
-        <div class="player-wrapper" id="playerContainer" style="display: none;">
-          <audio id="audioPlayer" preload="auto"></audio>
-          <div class="custom-player">
-            <button id="playPauseBtn" class="player-btn play-toggle-btn" type="button" aria-label="播放 / 暂停" title="播放 / 暂停">
-              <svg class="icon-play" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="6 4 20 12 6 20 6 4"></polygon>
-              </svg>
-              <svg class="icon-pause" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
-                <rect x="6" y="4" width="4" height="16"></rect>
-                <rect x="14" y="4" width="4" height="16"></rect>
-              </svg>
-            </button>
-
-            <span id="currentTime" class="player-time">00:00</span>
-
-            <div class="waveform-container" id="waveformContainer" role="slider" aria-label="播放进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-              <div class="waveform-bars" id="waveformBars"></div>
-              <div class="waveform-hover-line" id="waveformHoverLine"></div>
-              <div class="waveform-tooltip" id="waveformTooltip">00:00</div>
-            </div>
-
-            <span id="totalDuration" class="player-time">00:00</span>
-
-            <button id="speedBtn" class="player-btn speed-btn" type="button" aria-label="播放速度" title="切换播放速度">
-              1.0x
-            </button>
-
-            <button id="downloadBtn" class="player-btn download-btn" type="button" aria-label="下载音频" title="下载音频（MP3）">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Center Bottom Warm Reading Banner -->
-        <div class="work-reading-banner" aria-hidden="true">
-          <div class="reading-banner-art">
-            <svg viewBox="0 0 160 55" width="130" height="46" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- Open book with soft pastel pages -->
-              <path d="M14 44 C34 37 54 39 72 45 C90 39 110 37 130 44 L130 23 C110 17 90 19 72 25 C54 19 34 17 14 23 Z" fill="#ffffff" stroke="#f3cfda" stroke-width="1.6"/>
-              <path d="M72 25 L72 45" stroke="#f0b8cb" stroke-width="1.6"/>
-              <line x1="24" y1="28" x2="60" y2="30" stroke="#fce4ec" stroke-width="1.3" stroke-linecap="round"/>
-              <line x1="24" y1="34" x2="56" y2="36" stroke="#fce4ec" stroke-width="1.3" stroke-linecap="round"/>
-              <line x1="84" y1="30" x2="120" y2="28" stroke="#fce4ec" stroke-width="1.3" stroke-linecap="round"/>
-              <line x1="88" y1="36" x2="120" y2="34" stroke="#fce4ec" stroke-width="1.3" stroke-linecap="round"/>
-              <!-- Steaming cute coffee cup with saucer -->
-              <ellipse cx="142" cy="44" rx="14" ry="4" fill="#fde8ef" stroke="#f0b8cb" stroke-width="1.2"/>
-              <path d="M133 26 L135 41 C135 43 149 43 149 41 L151 26 Z" fill="#ffffff" stroke="#f0b8cb" stroke-width="1.4"/>
-              <path d="M151 29 C155 29 157 32 157 35 C157 38 153 39 150 39" stroke="#f0b8cb" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-              <path d="M140 22 Q142 16 140 12" stroke="#f48fb1" stroke-width="1.2" stroke-linecap="round" fill="none"/>
-              <path d="M144 22 Q146 17 144 14" stroke="#f48fb1" stroke-width="1.2" stroke-linecap="round" fill="none"/>
-              <path d="M142 8 Q144 6 146 8 Q148 6 150 8 Q146 12 146 13 Q146 12 142 8 Z" fill="#f48fb1" opacity="0.8"/>
-              <!-- Drifting cherry blossom petals -->
-              <path d="M116 12 Q121 8 125 13 Q119 16 116 12 Z" fill="#f8bbd0" opacity="0.85"/>
-              <path d="M48 10 Q53 7 56 12 Q51 15 48 10 Z" fill="#f8bbd0" opacity="0.85"/>
-            </svg>
-          </div>
-          <div class="reading-banner-copy">
-            <span class="reading-banner-main">好声音，陪你读更远的世界 ♡</span>
-            <span class="reading-banner-sub">Reading makes a kinder you.</span>
-          </div>
-        </div>
-        </section>
-
-        <div
-          id="workspaceSplitter"
-          class="workspace-seam"
-          role="separator"
-          aria-label="调整语音与 AI 窗口宽度"
-          aria-orientation="vertical"
-          aria-valuemin="30"
-          aria-valuemax="75"
-          aria-valuenow="57"
-          tabindex="0"
-          title="左右拖动调整窗口宽度"
-        >
-          <span class="workspace-seam-handle" aria-hidden="true"></span>
-        </div>
-
-        <!-- AI Explanation Panel -->
-        <section class="work-right explain-section" id="explainSection" aria-label="AI Reading Copilot">
-          <div class="explain-header">
-            <div class="explain-heading-row">
-            <div class="explain-title-group">
-              <span class="explain-spark" aria-hidden="true">✦</span>
-              <span class="explain-title">AI Reading Copilot</span>
-              <span id="explainLangBadge" class="explain-lang-badge">中文</span>
-            </div>
-            </div>
-            <div class="explain-controls">
-              <label class="explain-toggle" title="AI 解说开关">
-                <input type="checkbox" id="explainToggle" checked />
-                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
-                <span class="explain-toggle-text">AI 解说</span>
-              </label>
-              <select id="explainLangSelect" class="explain-lang-select" aria-label="解说语言" title="解说语言">
-                <option value="zh">中文解说</option>
-                <option value="ja">日语解说</option>
-                <option value="en">英文解说</option>
-              </select>
-              <select id="explainModelSelect" class="explain-lang-select" aria-label="AI 模型" title="AI 模型">
-                <option value="">正在加载模型…</option>
-              </select>
-              <select id="explainThinkingSelect" class="explain-lang-select" aria-label="解说深度" title="解说深度">
-                <option value="">正在加载档位…</option>
-              </select>
-              <button id="explainRetryBtn" class="explain-retry-btn" type="button" title="重新生成当前句子的解说">重新解说</button>
-            </div>
-          </div>
-          <div class="explain-messages" id="explainMessages">
-            <div class="explain-empty-card" id="explainEmptyCard">
-              <div class="explain-empty-art">
-                <svg viewBox="0 0 130 90" width="116" height="80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <!-- Sparkle Star -->
-                  <path d="M102 20 Q104 14 106 20 Q112 22 106 24 Q104 30 102 24 Q96 22 102 20 Z" fill="#f48fb1" opacity="0.9"/>
-                  <!-- Stack of books next to cat -->
-                  <rect x="86" y="56" width="32" height="9" rx="2.5" fill="#ffd1dc" stroke="#f48fb1" stroke-width="1.3"/>
-                  <line x1="90" y1="61" x2="114" y2="61" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round"/>
-                  <rect x="90" y="48" width="28" height="8" rx="2.5" fill="#e1bee7" stroke="#ce93d8" stroke-width="1.3"/>
-                  <line x1="94" y1="52" x2="114" y2="52" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round"/>
-                  <!-- Chibi Cat Body -->
-                  <ellipse cx="50" cy="52" rx="22" ry="18" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.6"/>
-                  <!-- Cat Head -->
-                  <circle cx="50" cy="35" r="16" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.6"/>
-                  <!-- Ears with brown/pink patches -->
-                  <path d="M37 24 L42 14 L47 22 Z" fill="#8d6e63" stroke="#e0cbd4" stroke-width="1.2"/>
-                  <path d="M39 22 L42 16 L45 21 Z" fill="#ffcdd2"/>
-                  <path d="M63 24 L58 14 L53 22 Z" fill="#8d6e63" stroke="#e0cbd4" stroke-width="1.2"/>
-                  <path d="M61 22 L58 16 L55 21 Z" fill="#ffcdd2"/>
-                  <!-- Eyes -->
-                  <ellipse cx="44" cy="34" rx="2" ry="2.6" fill="#42303a"/>
-                  <ellipse cx="56" cy="34" rx="2" ry="2.6" fill="#42303a"/>
-                  <!-- Blush -->
-                  <circle cx="41" cy="38" r="3" fill="#ffb6c1" opacity="0.7"/>
-                  <circle cx="59" cy="38" r="3" fill="#ffb6c1" opacity="0.7"/>
-                  <!-- Mouth / Nose -->
-                  <circle cx="50" cy="36" r="1" fill="#ff80ab"/>
-                  <path d="M47 38 Q50 40 53 38" stroke="#42303a" stroke-width="1.1" stroke-linecap="round" fill="none"/>
-                  <!-- Open Book held by paws -->
-                  <path d="M28 58 C38 52 46 53 50 56 C54 53 62 52 72 58 L72 44 C62 39 54 40 50 43 C46 40 38 39 28 44 Z" fill="#ede7f6" stroke="#9575cd" stroke-width="1.5"/>
-                  <path d="M50 43 L50 56" stroke="#9575cd" stroke-width="1.5"/>
-                  <!-- Paws -->
-                  <ellipse cx="36" cy="46" rx="3.5" ry="2.5" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.2"/>
-                  <ellipse cx="64" cy="46" rx="3.5" ry="2.5" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.2"/>
-                </svg>
-              </div>
-              <h4 class="explain-empty-title">AI 解说已就绪</h4>
-              <p class="explain-empty-desc">
-                生成语音后，可以查看当前句子的翻译和语法分析。<br />你的 AI 阅读伙伴，随时为你答疑解惑。
-              </p>
-              <div class="explain-quick-actions" role="region" aria-label="快捷分析入口">
-                <button type="button" class="explain-action-card" data-action="translate">
-                  <span class="action-card-icon">📄</span>
-                  <div class="action-card-text">
-                    <span class="action-card-title">翻译解析</span>
-                    <span class="action-card-sub">多语言对照</span>
-                  </div>
-                </button>
-                <button type="button" class="explain-action-card" data-action="summary">
-                  <span class="action-card-icon">📑</span>
-                  <div class="action-card-text">
-                    <span class="action-card-title">要点总结</span>
-                    <span class="action-card-sub">提炼核心内容</span>
-                  </div>
-                </button>
-                <button type="button" class="explain-action-card" data-action="grammar">
-                  <span class="action-card-icon">💡</span>
-                  <div class="action-card-text">
-                    <span class="action-card-title">语法分析</span>
-                    <span class="action-card-sub">深入讲解</span>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="explain-input-row">
-            <input
-              type="text"
-              id="explainChatInput"
-              class="explain-chat-input"
-              placeholder="输入问题，或粘贴文本让 AI 帮你分析…（Enter 发送）"
-              maxlength="500"
-              autocomplete="off"
-            />
-            <button id="explainSendBtn" class="explain-send-btn" type="button" aria-label="发送消息" title="发送">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-            </button>
-          </div>
-          <div class="explain-suggestions">
-            <span class="suggest-icon">💡</span>
-            <span class="suggest-label">试试：</span>
-            <button type="button" class="suggest-chip" data-prompt="这句话的语法怎么分析？">这句话的语法怎么分析？</button>
-            <span class="suggest-sep">/</span>
-            <button type="button" class="suggest-chip" data-prompt="帮我总结这段的主要内容">帮我总结这段的主要内容</button>
-          </div>
-        </section>
-      </div>
-    </div>
-
-    <!-- History Sidebar -->
-    <aside class="history-sidebar" id="historySection" aria-label="播放历史" aria-hidden="true" inert>
-      <header class="sidebar-brand">
-        <div class="header-left">
-          <div class="header-main">
-            <span class="brand-icon-wrap" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="3" y="9" width="3" height="6" rx="1.5" fill="#ffffff" />
-                <rect x="8" y="5" width="3" height="14" rx="1.5" fill="#ffffff" />
-                <rect x="13" y="3" width="3" height="18" rx="1.5" fill="#ffffff" />
-                <rect x="18" y="7" width="3" height="10" rx="1.5" fill="#ffffff" />
-              </svg>
-            </span>
-            <div class="brand-text-col">
-              <h1 class="app-title">TTS Web</h1>
-              <p class="app-subtitle">让声音和理解一起发生 ✨</p>
-            </div>
-            <span class="header-tag">日语语音工作室</span>
-          </div>
-        </div>
+      <div class="list-caption">你的会话 <span id="conversationCount">0</span></div>
+      <nav id="conversationList" class="conversation-list" aria-label="选择会话"></nav>
+      <div class="sidebar-footer"><span class="local-dot"></span><span>会话保存在此浏览器</span></div>
+      <div id="leftResizer" class="panel-resizer panel-resizer-left" role="separator" aria-orientation="vertical" tabindex="0" title="拖拽调整大小，双击恢复默认" aria-label="调整会话栏宽度"></div>
+    </aside>
+    <main id="chatMain" class="chat-main">
+      <header class="chat-header">
+        <button id="historyBtn" class="icon-button" aria-controls="conversationSidebar" aria-expanded="true" aria-label="展开或收起会话栏" title="会话列表">☰</button>
+        <div class="chat-heading"><h1 id="conversationTitle">新会话</h1><span>文字转语音 · TTS</span></div>
+        <div class="header-actions"><button id="settingsBtn" class="quiet-button" aria-label="打开设置" title="打开设置"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span>设置</span><span id="keyStatusBadge" style="display:none"> · Key</span></button><button id="aiPanelBtn" class="panel-button" aria-controls="explainSection" aria-expanded="true">✧ AI 辅助</button></div>
       </header>
-
-      <!-- Sidebar Navigation Menu -->
-      <nav class="sidebar-nav" aria-label="侧边栏主导航">
-        <ul class="sidebar-menu-list">
-          <li>
-            <button id="sidebarHistoryNavBtn" class="sidebar-nav-item is-active" type="button" aria-label="播放历史">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 16 14"></polyline>
-              </svg>
-              <span class="nav-item-text">播放历史</span>
-              <span id="navHistoryBadge" class="nav-history-badge">0</span>
-            </button>
-          </li>
-          <li>
-            <button id="sidebarFavNavBtn" class="sidebar-nav-item" type="button" aria-label="我的收藏">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-              </svg>
-              <span class="nav-item-text">我的收藏</span>
-            </button>
-          </li>
-          <li>
-            <button id="sidebarFilesNavBtn" class="sidebar-nav-item" type="button" aria-label="我的文件">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-              </svg>
-              <span class="nav-item-text">我的文件</span>
-            </button>
-          </li>
-          <li>
-            <button id="settingsBtn" class="sidebar-nav-item sidebar-settings-btn" type="button" aria-label="打开设置" title="设置">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <div id="errorAlert" class="chat-notice" role="alert" style="display:none"><span id="errorMessage"></span><button id="migrationRetryBtn" hidden>重试导入</button><button id="errorCloseBtn" aria-label="关闭提示">×</button></div>
+      <section id="messageList" class="message-list" aria-label="会话消息" tabindex="0"></section>
+      <button id="jumpToLatestBtn" class="jump-latest" hidden>↓ 回到最新消息</button>
+      <footer class="composer-area">
+        <form id="composer" class="composer">
+          <label class="sr-only" for="textInput">要转为语音的文本</label>
+          <textarea id="textInput" rows="3" placeholder="写下想听的文字…" spellcheck="false"></textarea>
+          <div class="composer-bottom"><div class="voice-controls">
+            <label><span class="sr-only">语音引擎</span><select id="engineSelect"><option value="edge">Edge TTS</option></select></label>
+            <span class="control-divider"></span>
+            <label><span class="sr-only">声音选择</span><select id="voiceSelect"><option value="ja-JP-NanamiNeural">七海 · 日语女声</option></select></label>
+            <span id="engineBadge" class="engine-pill">免费</span>
+          </div><button id="generateBtn" class="send-button" type="submit" aria-label="发送文本并生成语音" title="发送 · Ctrl+Enter">发送 <span>↑</span></button></div>
+        </form>
+        <div class="composer-hint"><span>朗读你的原文 <span class="hint-separator">·</span> Ctrl / ⌘ + Enter 发送</span><span id="charCounter">0 / 1000 字</span></div>
+      </footer>
+    </main>
+    <aside id="explainSection" class="ai-sidebar" aria-label="AI 辅助面板">
+      <div id="rightResizer" class="panel-resizer panel-resizer-right" role="separator" aria-orientation="vertical" tabindex="0" title="拖拽调整大小，双击恢复默认" aria-label="调整AI面板宽度"></div>
+      <header class="ai-heading">
+        <div class="ai-heading-title">
+          <span class="ai-symbol">✧</span>
+          <strong>阅读助手</strong>
+        </div>
+        <button id="aiCloseBtn" class="icon-button" aria-label="收起 AI 面板" title="收起面板">›</button>
+      </header>
+      <div class="ai-context">
+        <div class="ai-context-header">
+          <span class="eyebrow">当前解说文本</span>
+          <button id="explainRetryBtn" class="quiet-button ai-retry-btn" style="display: none;" aria-hidden="true" tabindex="-1"></button>
+        </div>
+        <div class="ai-target-box">
+          <p id="explainTarget">发送一段文本，开始阅读。</p>
+        </div>
+      </div>
+      <div id="explainMessages" class="explain-messages" aria-live="polite"></div>
+      <div class="ai-composer">
+        <div id="explainOptionsPopover" class="ai-options-popover" role="dialog" aria-label="AI 解说设置" hidden>
+          <div class="ai-popover-header">
+            <div class="ai-popover-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
               </svg>
-              <span class="nav-item-text">设置</span>
-              <span id="keyStatusBadge" class="key-status-dot" title="API Key 已设置" style="display: none;"></span>
-            </button>
-          </li>
-        </ul>
-      </nav>
-
-      <div class="sidebar-header">
-        <div class="sidebar-title-group">
-          <svg class="history-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 16 14"></polyline>
-          </svg>
-          <h2 class="sidebar-title">播放历史</h2>
-          <span id="historyBadge" class="history-badge">0</span>
+              <span>解说偏好设置</span>
+            </div>
+            <button id="explainOptionsCloseBtn" class="ai-popover-close" type="button" aria-label="关闭设置面板" title="关闭设置">×</button>
+          </div>
+          <div class="ai-popover-content">
+            <div class="ai-options-row">
+              <label class="auto-explain">
+                <input id="explainToggle" type="checkbox" checked />
+                <span>自动解说</span>
+              </label>
+              <div class="ai-select-pill ai-lang-pill">
+                <span class="pill-label">语言</span>
+                <select id="explainLangSelect" aria-label="解说语言">
+                  <option value="zh">中文</option>
+                  <option value="ja">日本語</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+            </div>
+            <div class="ai-options-grid">
+              <div class="ai-select-pill">
+                <span class="pill-label">模型</span>
+                <select id="explainModelSelect" aria-label="AI 模型">
+                  <option value="">加载模型…</option>
+                </select>
+              </div>
+              <div class="ai-select-pill">
+                <span class="pill-label">深度</span>
+                <select id="explainThinkingSelect" aria-label="解说深度">
+                  <option value="">加载档位…</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="ai-popover-footer">
+            <span>更改即时生效 · 发送新文本时生效</span>
+          </div>
         </div>
-        <div class="sidebar-actions">
-          <button id="clearHistoryBtn" class="clear-history-btn" type="button" aria-label="清空全部历史" title="清空全部历史">
-            清空全部
+        <div class="explain-suggestions">
+          <button type="button" class="suggest-chip" data-prompt="请翻译这段文本。">翻译</button>
+          <button type="button" class="suggest-chip" data-prompt="请分析这段文本的语法。">语法分析</button>
+          <button type="button" class="suggest-chip" data-prompt="请解释重点词汇。">重点词汇</button>
+          <button type="button" class="suggest-chip" data-prompt="请为这段日文标注振假名和读音。">振假名</button>
+          <button type="button" class="suggest-chip" data-prompt="请提供两个相同句型的实用日常例句。">例句拓展</button>
+        </div>
+        <div class="ai-input-row">
+          <button
+            id="explainOptionsToggleBtn"
+            class="ai-plus-btn"
+            type="button"
+            aria-label="解说偏好设置"
+            aria-expanded="false"
+            aria-controls="explainOptionsPopover"
+            title="解说设置"
+          >
+            <svg class="plus-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
           </button>
-          <button id="sidebarCloseBtn" class="sidebar-close-btn" type="button" aria-label="收起历史侧栏" title="收起历史侧栏">‹</button>
+          <label class="sr-only" for="explainChatInput">围绕这段文本提问</label>
+          <textarea id="explainChatInput" rows="2" maxlength="500" placeholder="围绕这段文本提问… (Enter 发送)"></textarea>
+          <button id="explainSendBtn" type="button" aria-label="发送 AI 提问" title="发送">↑</button>
         </div>
-      </div>
-
-      <div class="sidebar-scrollable">
-        <ul class="history-list" id="historyList"></ul>
-        <p class="history-empty" id="historyEmpty" style="display: none;">还没有播放记录<br /><span>生成一段语音后，它会出现在这里</span></p>
-      </div>
-
-      <!-- Sidebar Cute Cat Illustration Card (as seen in image) -->
-      <div class="sidebar-cat-card" aria-hidden="true">
-        <div class="sidebar-cat-copy">
-          <span class="cat-copy-title">每天一点阅读</span>
-          <span class="cat-copy-sub">让世界更靠近你 ♡</span>
-        </div>
-        <div class="sidebar-cat-art">
-          <svg viewBox="0 0 92 62" width="76" height="50" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- Bottom Book (Pink) -->
-            <rect x="12" y="44" width="66" height="11" rx="3" fill="#ffd5e0" stroke="#f48fb1" stroke-width="1.3"/>
-            <line x1="18" y1="50" x2="72" y2="50" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round"/>
-            <!-- Top Book (Lavender) -->
-            <rect x="18" y="34" width="56" height="10" rx="3" fill="#e8d5f2" stroke="#ce93d8" stroke-width="1.3"/>
-            <line x1="23" y1="39" x2="68" y2="39" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round"/>
-            <!-- Curled sleeping chibi cat -->
-            <ellipse cx="45" cy="27" rx="19" ry="12" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.4"/>
-            <circle cx="56" cy="21" r="11" fill="#ffffff" stroke="#e0cbd4" stroke-width="1.4"/>
-            <!-- Cat Ears -->
-            <path d="M49 13 L54 20 L46 19 Z" fill="#8d6e63" stroke="#e0cbd4" stroke-width="1"/>
-            <path d="M50 15 L53 19 L48 18 Z" fill="#ffcdd2"/>
-            <path d="M62 13 L67 20 L59 19 Z" fill="#8d6e63" stroke="#e0cbd4" stroke-width="1"/>
-            <path d="M63 15 L66 19 L61 18 Z" fill="#ffcdd2"/>
-            <!-- Sleeping Curved Eyes -->
-            <path d="M52 22 Q54 24 56 22" stroke="#684b57" stroke-width="1.2" stroke-linecap="round" fill="none"/>
-            <path d="M59 22 Q61 24 63 22" stroke="#684b57" stroke-width="1.2" stroke-linecap="round" fill="none"/>
-            <!-- Blush -->
-            <circle cx="51" cy="25" r="2" fill="#ffb6c1" opacity="0.75"/>
-            <circle cx="64" cy="25" r="2" fill="#ffb6c1" opacity="0.75"/>
-            <!-- Tail curled -->
-            <path d="M27 28 C24 23 29 19 32 22" stroke="#e0cbd4" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-            <!-- Floating tiny heart -->
-            <path d="M72 10 Q74 7 76 10 Q78 7 80 10 Q76 14 76 15 Q76 14 72 10 Z" fill="#f48fb1" opacity="0.85"/>
-          </svg>
-        </div>
+        <p class="ai-composer-hint">AI 辅助理解 · 语音始终朗读原文</p>
       </div>
     </aside>
-
-    <!-- Mobile Drawer Backdrop -->
-    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-
-    <!-- Settings Modal (Theme & BYOK Key Configuration) -->
+  </div>
+  <div id="sidebarBackdrop" class="drawer-backdrop" hidden></div>
     <div id="settingsModal" class="modal-overlay" style="display: none;">
-      <div class="modal-card">
+      <div class="modal-dialog modal-card">
         <div class="modal-header">
           <div class="modal-title-group">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -549,7 +151,7 @@
         </div>
 
         <div class="modal-body">
-          <!-- Multi-choice Theme Selection Section -->
+          <!-- Day and night theme selection -->
           <div class="settings-theme-section">
             <div class="settings-sub-header">
               <h4 class="settings-sub-title">
@@ -559,44 +161,25 @@
                 </svg>
                 界面主题风格
               </h4>
-              <span class="settings-sub-desc">选择你喜欢的工作区视觉主题，即时切换并自动保存</span>
+              <span class="settings-sub-desc">选择白天或夜晚主题，即时切换并自动保存</span>
             </div>
 
             <div class="theme-options-grid" id="themeOptionsGrid" role="radiogroup" aria-label="主题风格选择">
-              <!-- Classic -->
-              <button type="button" class="theme-option-btn" data-theme="default" role="radio" aria-checked="false">
-                <div class="theme-preview-palette palette-default">
+              <button type="button" class="theme-option-btn active" data-theme="light" role="radio" aria-checked="true">
+                <div class="theme-preview-palette palette-light">
                   <span class="palette-swatch swatch-bg"></span>
                   <span class="palette-swatch swatch-primary"></span>
                   <span class="palette-swatch swatch-accent"></span>
                 </div>
                 <div class="theme-info-box">
                   <div class="theme-name-row">
-                    <span class="theme-name">经典沉稳</span>
+                    <span class="theme-name">白天模式</span>
                   </div>
-                  <span class="theme-desc">科技蓝 · 极简冷澈</span>
+                  <span class="theme-desc">明亮清晰 · 白底黑字</span>
                 </div>
                 <span class="theme-check-badge" aria-hidden="true">✓</span>
               </button>
 
-              <!-- Sakura (Image Match - Recommended) -->
-              <button type="button" class="theme-option-btn active" data-theme="sakura" role="radio" aria-checked="true">
-                <div class="theme-preview-palette palette-sakura">
-                  <span class="palette-swatch swatch-bg"></span>
-                  <span class="palette-swatch swatch-primary"></span>
-                  <span class="palette-swatch swatch-accent"></span>
-                </div>
-                <div class="theme-info-box">
-                  <div class="theme-name-row">
-                    <span class="theme-name">春日粉樱</span>
-                    <span class="theme-tag-hot">推荐</span>
-                  </div>
-                  <span class="theme-desc">浪漫樱花 · 治愈插画</span>
-                </div>
-                <span class="theme-check-badge" aria-hidden="true">✓</span>
-              </button>
-
-              <!-- Dark Night -->
               <button type="button" class="theme-option-btn" data-theme="dark" role="radio" aria-checked="false">
                 <div class="theme-preview-palette palette-dark">
                   <span class="palette-swatch swatch-bg"></span>
@@ -605,13 +188,25 @@
                 </div>
                 <div class="theme-info-box">
                   <div class="theme-name-row">
-                    <span class="theme-name">暗夜深邃</span>
+                    <span class="theme-name">夜晚模式</span>
                   </div>
-                  <span class="theme-desc">深色护眼 · 沉浸夜读</span>
+                  <span class="theme-desc">深色界面 · 沉浸夜读</span>
                 </div>
                 <span class="theme-check-badge" aria-hidden="true">✓</span>
               </button>
             </div>
+          </div>
+
+          <div class="modal-section-divider"></div>
+
+          <div class="settings-motion-section">
+            <label for="motionSelect" class="settings-sub-title">界面动效</label>
+            <select id="motionSelect" class="form-input" aria-describedby="motionHint">
+              <option value="system">跟随系统</option>
+              <option value="full">开启</option>
+              <option value="reduced">关闭</option>
+            </select>
+            <p id="motionHint" class="settings-sub-desc" aria-live="polite"></p>
           </div>
 
           <div class="modal-section-divider"></div>
@@ -632,9 +227,9 @@
             如果要使用高品质的 <strong>Gemini TTS</strong>，请配置你自己的 Google Gemini API Key。AI Reading Copilot 使用服务端托管的模型，不读取此 Key。
           </p>
 
-          <div class="form-field">
+          <div class="settings-field form-field">
             <label for="geminiApiKeyInput" class="form-label">Google Gemini API Key</label>
-            <div class="input-with-action">
+            <div class="key-input-wrapper input-with-action">
               <input
                 type="password"
                 id="geminiApiKeyInput"
@@ -672,8 +267,7 @@
         </div>
       </div>
     </div>
-  </div>
 
-  <script src="app.js?v=20260915-multimodel-copilot"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

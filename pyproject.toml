@@ -16,6 +16,8 @@ dependencies = [
     "cachetools>=5.3.0",
     "edge-tts>=7.2.8",
     "redis>=5.2.0",
+    # Security floor for the requests/google-genai transitive dependency.
+    "urllib3>=2.8.0",
 ]
 
 [dependency-groups]
@@ -24,7 +26,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["backend"]
-testpaths = ["backend/tests"]
+pythonpath = ["src"]
+testpaths = ["tests"]
 addopts = "--basetemp=.pytest_temp"
+
 

@@ -39,7 +39,7 @@ jobs:
         run: uv run pytest
 
   frontend:
-    name: Frontend syntax
+    name: Frontend checks
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -51,7 +51,17 @@ jobs:
           node-version: 22
 
       - name: Check JavaScript syntax
-        run: node --check frontend/app.js
+        run: |
+          node scripts/test_frontend_syntax.cjs
+          node scripts/check_frontend.cjs
+
+      - name: Check conversation storage and offline browser flows
+        run: |
+          node scripts/test_conversations.cjs
+          node scripts/test_frontend.cjs
+          node scripts/test_theme_and_sidebar.cjs
+          node scripts/test_async_state.cjs
+          node scripts/test_chat.cjs
 
   docker:
     name: Docker build

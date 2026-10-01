@@ -53,6 +53,9 @@ __pypackages__/
 # ==========================================
 .pytest_cache/
 .pytest_temp/
+.pytest_*_fix/
+.pytest_private_run/
+.test_tmp_probe/
 .coverage
 .coverage.*
 .cache
@@ -79,6 +82,7 @@ htmlcov/
 *.env.test
 *.env.production
 !.env.example
+/secrets/
 *.pem
 *.key
 *.p12
@@ -104,6 +108,7 @@ htmlcov/
 # TTS Application Runtime Caches & Databases
 # ==========================================
 **/cache/
+src/app/cache/
 backend/app/cache/
 backend/cache/
 *.db
@@ -128,3 +133,4 @@ backend/cache/
 logs/
 tmp/
 temp/
+

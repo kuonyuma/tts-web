@@ -1,0 +1,226 @@
+/**
+ * TTS Web - Theme Design Tokens & Ambient Lighting
+ * Minimalist Light (ChatGPT Style) and Refined Dark Theme
+ */
+
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Noto Sans JP", "Hiragino Sans", Meiryo, sans-serif;
+  --radius-lg: 16px;
+  --radius-md: 10px;
+  --radius-sm: 6px;
+
+  --error-bg: #fff1f2;
+  --error-border: #fecdd3;
+  --error-text: #e11d48;
+
+  --accent-sakura: #f48fb1;
+  --accent-mint: #10b981;
+
+  /* Default Light Theme Tokens */
+  --bg-page: #ffffff;
+  --bg-card: #ffffff;
+  --bg-subtle: #f9f9f9;
+  --bg-subtle-hover: #f3f3f3;
+  --text-primary: #0d0d0d;
+  --text-secondary: #5d5d5d;
+  --text-muted: #8e8e8e;
+
+  --primary: #0d0d0d;
+  --primary-hover: #262626;
+  --primary-active: #000000;
+  --primary-subtle: #f4f4f4;
+  --primary-subtle-border: #e5e5e5;
+
+  --border: #e5e5e5;
+  --border-hover: #d1d5db;
+  --border-focus: #0d0d0d;
+
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-focus: 0 0 0 2px rgba(13, 13, 13, 0.15);
+  --shadow-drawer: -4px 0 20px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Minimalist Light Theme (ChatGPT Style) ─────────────────────── */
+[data-theme="light"],
+body[data-theme="light"] {
+  --bg-page: #ffffff;
+  --bg-card: #ffffff;
+  --bg-subtle: #f9f9f9;
+  --bg-subtle-hover: #f3f3f3;
+  --text-primary: #0d0d0d;
+  --text-secondary: #5d5d5d;
+  --text-muted: #8e8e8e;
+
+  --primary: #0d0d0d;
+  --primary-hover: #262626;
+  --primary-active: #000000;
+  --primary-subtle: #f4f4f4;
+  --primary-subtle-border: #e5e5e5;
+
+  --border: #e5e5e5;
+  --border-hover: #d1d5db;
+  --border-focus: #0d0d0d;
+
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-focus: 0 0 0 2px rgba(13, 13, 13, 0.15);
+  --shadow-drawer: -4px 0 20px rgba(0, 0, 0, 0.06);
+}
+
+body[data-theme="light"],
+[data-theme="light"] body {
+  background-color: #ffffff;
+  color: var(--text-primary);
+}
+
+body[data-theme="light"]::before,
+[data-theme="light"] body::before {
+  content: none;
+  background: #ffffff;
+}
+
+[data-theme="light"] .ambient-fields {
+  display: none !important;
+}
+
+/* ── Dark Theme Design Tokens ──────────────────────────────────── */
+[data-theme="dark"],
+body[data-theme="dark"] {
+  --bg-page: #0f1117;
+  --bg-card: #181b24;
+  --bg-subtle: #1e222e;
+  --bg-subtle-hover: #262b3a;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --primary: #818cf8;
+  --primary-hover: #6366f1;
+  --primary-active: #4f46e5;
+  --primary-subtle: #1e1b4b;
+  --primary-subtle-border: #312e81;
+
+  --border: #2e3547;
+  --border-hover: #434d67;
+  --border-focus: #818cf8;
+
+  --shadow-card: 0 8px 30px -4px rgba(0, 0, 0, 0.4);
+  --shadow-focus: 0 0 0 3px rgba(129, 140, 248, 0.25);
+  --shadow-drawer: -6px 0 24px rgba(0, 0, 0, 0.5);
+}
+
+body[data-theme="dark"],
+[data-theme="dark"] body {
+  background-color: #0f1117;
+  color: var(--text-primary);
+}
+
+body[data-theme="dark"]::before,
+[data-theme="dark"] body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(900px circle at 15% 10%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
+    radial-gradient(850px circle at 85% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 55%);
+}
+
+/* ── Ambient Fields & Lighting ─────────────────────────────────── */
+.ambient-fields {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambient-field {
+  position: absolute;
+  top: 14%;
+  width: 58vw;
+  height: 72vh;
+  border-radius: 50%;
+  opacity: 0.58;
+  will-change: transform, opacity;
+  transition: transform 1250ms cubic-bezier(0.22, 1, 0.36, 1), opacity 1100ms ease;
+}
+
+.ambient-field-left {
+  left: -28vw;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(104, 100, 232, 0.24) 0%,
+    rgba(104, 100, 232, 0.1) 46%,
+    transparent 74%
+  );
+}
+
+.ambient-field-right {
+  right: -28vw;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(226, 160, 181, 0.25) 0%,
+    rgba(226, 160, 181, 0.1) 46%,
+    transparent 74%
+  );
+}
+
+.ambient-fields::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 38vw;
+  height: 64vh;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(177, 151, 218, 0.18),
+    rgba(226, 160, 181, 0.06) 42%,
+    transparent 72%
+  );
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.72);
+  transition: opacity 1150ms ease, transform 1250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.is-fusing .ambient-field-left {
+  opacity: 0.82;
+  transform: translate3d(32vw, 0, 0) scale(1.08);
+  transition-duration: 1450ms, 1250ms;
+}
+
+body.is-fusing .ambient-field-right {
+  opacity: 0.82;
+  transform: translate3d(-32vw, 0, 0) scale(1.08);
+  transition-duration: 1450ms, 1250ms;
+}
+
+body.is-fusing .ambient-fields::after {
+  opacity: 0.86;
+  transform: translate(-50%, -50%) scale(1.04);
+  transition-duration: 1350ms, 1250ms;
+}
+
+/* ── Custom Thin Scrollbars ────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}

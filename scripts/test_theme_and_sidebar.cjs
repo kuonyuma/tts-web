@@ -47,10 +47,13 @@ const server = http.createServer(async (req, res) => {
     explainRequestCount += 1;
     return json({ detail: 'Gemini 服务需要 API Key。' }, 400);
   }
-  const file = { '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css' }[url.pathname];
-  if (file) {
-    res.writeHead(200, { 'Content-Type': file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
-    return res.end(fs.readFileSync(path.join(root, 'frontend', file)));
+  const relativePath = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\//, '');
+  const filePath = path.join(root, 'frontend', relativePath);
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath);
+    const contentType = ext === '.js' ? 'text/javascript' : ext === '.css' ? 'text/css' : ext === '.html' ? 'text/html' : 'text/plain';
+    res.writeHead(200, { 'Content-Type': contentType });
+    return res.end(fs.readFileSync(filePath));
   }
   res.writeHead(404); res.end();
 });
@@ -110,114 +113,112 @@ let browserExit;
 
     await send('Runtime.enable');
     await send('Page.enable');
+    console.log('Browser system reduced-motion preference: '+await evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches"));
+    await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     await send('Page.navigate', { url });
 
     await wait('document.readyState === "complete"');
     await delay(300);
 
-    // 1. Verify settings is available only from the sidebar
-    const inSidebar = await evaluate('Boolean(document.querySelector("#historySection #settingsBtn"))');
-    const inCopilot = await evaluate('Boolean(document.querySelector(".explain-header .copilot-settings-btn"))');
-    assert.equal(inSidebar, true, 'Settings button must be inside the history sidebar');
-    assert.equal(inCopilot, false, 'Copilot header must not contain a settings button');
-    console.log('PASS settings button moved from copilot to sidebar');
+    await wait("document.body?.dataset.ready==='true'");
+    assert.equal(await evaluate("document.getElementById('explainModelSelect').value"),'deepseek-flash');
+    assert.deepEqual(await evaluate("[...document.getElementById('explainThinkingSelect').options].map(o=>o.value)"),['direct','deep']);
+    console.log('PASS model catalog drives reasoning modes');
+    await evaluate("document.getElementById('historyBtn').click();document.getElementById('aiPanelBtn').click();document.getElementById('settingsBtn').click()");
+    assert.equal(await evaluate("document.getElementById('settingsModal').style.display"),'flex');
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.theme-option-btn')].map(b=>b.dataset.theme).sort()"),['dark','light']);
+    for(const theme of ['dark','light']) {
+      await evaluate(`document.querySelector('.theme-option-btn[data-theme="${theme}"]').click()`);
+      assert.equal(await evaluate("localStorage.getItem('tts_theme')"),theme);
+      assert.equal(await evaluate(`document.querySelector('.theme-option-btn[data-theme="${theme}"]').getAttribute('aria-checked')`),'true');
+    }
+    await evaluate("document.getElementById('modalCloseBtn').click()");
+    assert.equal(await evaluate("document.getElementById('settingsModal').style.display"),'none');
+    await evaluate("document.getElementById('settingsBtn').click();document.getElementById('geminiApiKeyInput').value='fixture-key';document.getElementById('saveKeyBtn').click()");
+    assert.equal(await evaluate("getComputedStyle(document.getElementById('keyStatusBadge')).display==='none'"),false);
+    await evaluate("document.getElementById('settingsBtn').click();document.getElementById('clearKeyBtn').click();document.getElementById('modalCloseBtn').click()");
+    assert.equal(await evaluate("getComputedStyle(document.getElementById('keyStatusBadge')).display"),'none');
+    console.log('PASS settings remain accessible with both sidebars collapsed; light/dark theme controls');
+    for(const theme of ['default','sakura']) {
+      await evaluate(`localStorage.setItem('tts_theme','${theme}')`);
+      await send('Page.reload');
+      await wait("document.body?.dataset.ready==='true' && document.documentElement.dataset.theme==='light'");
+      assert.equal(await evaluate("localStorage.getItem('tts_theme')"),'light');
+    }
+    assert.equal(await evaluate("document.getElementById('conversationSidebar').hidden"),true);
+    assert.equal(await evaluate("document.getElementById('explainSection').hidden"),true);
+    console.log('PASS legacy theme migration and collapsed sidebar preferences survive reload');
+    await evaluate(`window.sampleTransition=(buttonId,panelId)=>{
+      const panel=document.getElementById(panelId),main=document.getElementById('chatMain');
+      const read=()=>({width:main.getBoundingClientRect().width,x:panel.getBoundingClientRect().x,opacity:Number(getComputedStyle(panel).opacity)});
+      const before=read(); document.getElementById(buttonId).click();
+      const animations=panel.getAnimations();
+      if(!animations.length)throw new Error('Sidebar must animate instead of switching display instantly: '+JSON.stringify({before,after:read(),transition:getComputedStyle(panel).transition,ready:document.body.dataset.ready,hidden:panel.hidden,display:getComputedStyle(panel).display}));
+      animations.forEach(a=>{a.pause();a.currentTime=a.effect.getTiming().duration/2});
+      const middle=read(); animations.forEach(a=>a.finish());
+      return {before,middle,after:read(),inert:panel.inert,visibility:getComputedStyle(panel).visibility};
+    }`);
+    for(const [button,panel] of [['historyBtn','conversationSidebar'],['aiPanelBtn','explainSection']]) {
+      const opening=await evaluate(`sampleTransition('${button}','${panel}')`);
+      assert(opening.before.width>opening.middle.width && opening.middle.width>opening.after.width,'Workspace shrinks continuously while opening');
+      assert.equal(opening.visibility,'visible');
+      const closing=await evaluate(`sampleTransition('${button}','${panel}')`);
+      assert(closing.before.width<closing.middle.width && closing.middle.width<closing.after.width,'Workspace expands continuously while closing');
+      assert.equal(closing.visibility,'hidden');
+      assert.equal(closing.inert,true);
+    }
+    console.log('PASS both desktop sidebars animate in both directions with continuous workspace resizing');
 
-    const copilotControls = await evaluate('({ model: document.getElementById("explainModelSelect").value, modes: Array.from(document.getElementById("explainThinkingSelect").options).map(o => o.value) })');
-    assert.equal(copilotControls.model, 'deepseek-flash');
-    assert.deepEqual(copilotControls.modes, ['direct', 'deep']);
-    console.log('PASS Copilot model catalog drives model-specific reasoning modes');
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await evaluate("document.getElementById('historyBtn').click()");
+    assert.equal(await evaluate("document.getElementById('chatMain').inert"),true);
+    assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth"),true);
+    await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+    assert.equal(await evaluate("document.getElementById('chatMain').inert"),false);
+    console.log('PASS mobile drawer and Escape restore the workspace');
+    await evaluate("Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{})))");
+    for(const [button,panel] of [['historyBtn','conversationSidebar'],['aiPanelBtn','explainSection']]) {
+      const opening=await evaluate(`sampleTransition('${button}','${panel}')`);
+      assert.equal(opening.before.width,opening.after.width,'Drawers do not squeeze the workspace');
+      assert(opening.middle.x>Math.min(opening.before.x,opening.after.x) && opening.middle.x<Math.max(opening.before.x,opening.after.x),'Drawer slides rather than jumping');
+      assert.equal(await evaluate("document.getElementById('chatMain').inert"),true);
+      const closing=await evaluate(`sampleTransition('${panel==='conversationSidebar'?'sidebarCloseBtn':'aiCloseBtn'}','${panel}')`);
+      assert(closing.middle.x>Math.min(closing.before.x,closing.after.x) && closing.middle.x<Math.max(closing.before.x,closing.after.x));
+      assert.equal(await evaluate('document.activeElement.id'),button);
+    }
+    await evaluate(`(async()=>{
+      const button=document.getElementById('historyBtn'),panel=document.getElementById('conversationSidebar');
+      for(let i=0;i<4;i++){button.click();panel.getBoundingClientRect();await new Promise(requestAnimationFrame);}
+      await Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{})));
+    })()`);
+    assert.equal(await evaluate("getComputedStyle(document.getElementById('conversationSidebar')).visibility"),'hidden');
+    assert.equal(await evaluate("getComputedStyle(document.getElementById('sidebarBackdrop')).pointerEvents"),'none');
+    console.log('PASS mobile sliding, focus restoration and rapid toggle reversal');
+    await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+    await evaluate("document.getElementById('aiPanelBtn').click();document.getElementById('explainSection').getBoundingClientRect()");
+    assert.equal(await evaluate("document.getElementById('explainSection').getAnimations().length"),0);
+    assert.equal(await evaluate("document.getElementById('sidebarBackdrop').getAnimations().length"),0);
+    console.log('PASS reduced-motion preference disables sidebar and backdrop animation');
+    assert.equal(await evaluate("!!document.getElementById('motionSelect')"),true,'Settings must let the user explicitly enable motion');
+    await evaluate("document.getElementById('aiCloseBtn').click();document.getElementById('settingsBtn').click();var motionOption=document.getElementById('motionSelect');motionOption.value='full';motionOption.dispatchEvent(new Event('change'));document.getElementById('modalCloseBtn').click()");
+    const forced=await evaluate("sampleTransition('aiPanelBtn','explainSection')");
+    assert(forced.middle.x>Math.min(forced.before.x,forced.after.x) && forced.middle.x<Math.max(forced.before.x,forced.after.x),'Explicit on overrides browser reduced-motion preference');
+    await send('Page.reload');
+    await wait("document.body?.dataset.ready==='true'");
+    assert.equal(await evaluate("document.getElementById('motionSelect').value"),'full');
+    assert.notEqual(await evaluate("getComputedStyle(document.getElementById('explainSection')).transition"),'none');
+    await evaluate("document.getElementById('settingsBtn').click();var motionOption=document.getElementById('motionSelect');motionOption.value='reduced';motionOption.dispatchEvent(new Event('change'));document.getElementById('modalCloseBtn').click()");
+    await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
+    await evaluate("document.getElementById('aiPanelBtn').click();document.getElementById('explainSection').getBoundingClientRect()");
+    assert.equal(await evaluate("document.getElementById('explainSection').getAnimations().length"),0);
+    await evaluate("document.getElementById('aiCloseBtn').click();document.getElementById('settingsBtn').click();var motionOption=document.getElementById('motionSelect');motionOption.value='system';motionOption.dispatchEvent(new Event('change'));document.getElementById('modalCloseBtn').click()");
+    assert.notEqual(await evaluate("getComputedStyle(document.getElementById('explainSection')).transition"),'none');
+    await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+    await wait("document.getElementById('motionHint').textContent.includes('关闭')");
+    assert.equal(await evaluate("getComputedStyle(document.getElementById('explainSection')).transition"),'none');
+    console.log('PASS explicit motion setting overrides either system preference, persists, and system mode follows live changes');
 
-    // 2. Verify history remains collapsed until the user opens it
-    assert.equal(await evaluate('document.getElementById("historySection").classList.contains("open")'), false);
-    console.log('PASS history sidebar defaults to collapsed');
-
-    // 3. Verify the workspace splitter resizes and persists the two panes
-    const initialSplit = await evaluate('Number(document.getElementById("workspaceSplitter").getAttribute("aria-valuenow"))');
-    const splitterBounds = await evaluate('(() => { const r = document.getElementById("workspaceSplitter").getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()');
-    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: splitterBounds.x, y: splitterBounds.y, button: 'left', clickCount: 1 });
-    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: splitterBounds.x + 90, y: splitterBounds.y, button: 'left', buttons: 1 });
-    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: splitterBounds.x + 90, y: splitterBounds.y, button: 'left', clickCount: 1 });
-    const resizedSplit = await evaluate('Number(document.getElementById("workspaceSplitter").getAttribute("aria-valuenow"))');
-    assert(resizedSplit > initialSplit, 'Dragging right should increase the left pane width');
-    assert.equal(await evaluate('Boolean(localStorage.getItem("tts_workspace_split_ratio"))'), true);
-    console.log('PASS workspace splitter resizes and persists pane widths');
-
-    // 4. Enabling AI explanation must not request AI or open settings
-    await evaluate('document.getElementById("explainToggle").click()');
-    await evaluate('document.getElementById("textInput").value = "Text waiting for optional AI explanation"');
-    await evaluate('document.getElementById("generateBtn").click()');
-    await wait('document.getElementById("generateBtn").disabled === false');
-    assert.equal(await evaluate('document.getElementById("settingsModal").style.display'), 'none');
-    assert.equal(explainRequestCount, 0);
-    await evaluate('document.getElementById("explainToggle").click()');
-    await delay(100);
-    assert.equal(await evaluate('document.getElementById("settingsModal").style.display'), 'none');
-    assert.equal(explainRequestCount, 0);
-    console.log('PASS enabling AI explanation does not request AI or open settings');
-
-    // 5. Verify initial theme is sakura
-    const initialTheme = await evaluate('document.documentElement.getAttribute("data-theme")');
-    assert.equal(initialTheme, 'sakura', 'Initial theme should default to sakura');
-    const sakuraDecorVisible = await evaluate('getComputedStyle(document.getElementById("sakuraDecor")).display !== "none"');
-    assert.equal(sakuraDecorVisible, true, 'Sakura decor should be visible in sakura theme');
-    console.log('PASS initial theme defaults to sakura and displays atmosphere decor');
-
-    // 6. Open settings modal from sidebar settings button
-    await evaluate('document.getElementById("settingsBtn").click()');
-    await wait('document.getElementById("settingsModal").style.display === "flex"');
-    console.log('PASS clicking sidebar settings button opens settings modal');
-
-    // 7. Verify multi-choice theme options exist in settings modal
-    const themeButtons = await evaluate('Array.from(document.querySelectorAll("#themeOptionsGrid .theme-option-btn")).map(b => b.getAttribute("data-theme"))');
-    assert.deepEqual(themeButtons.sort(), ['dark', 'default', 'sakura'].sort());
-    console.log('PASS theme options (default, sakura, dark) exist in settings modal');
-
-    // 8. Switch to default theme (Classic Blue)
-    await evaluate('document.querySelector(\'.theme-option-btn[data-theme="default"]\').click()');
-    assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), 'default');
-    assert.equal(await evaluate('localStorage.getItem("tts_theme")'), 'default');
-    const defaultSakuraHidden = await evaluate('getComputedStyle(document.getElementById("sakuraDecor")).display === "none"');
-    assert.equal(defaultSakuraHidden, true, 'Sakura decor should be hidden in default theme');
-    console.log('PASS switching to default theme works and updates localStorage');
-
-    // 9. Switch to dark theme
-    await evaluate('document.querySelector(\'.theme-option-btn[data-theme="dark"]\').click()');
-    assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), 'dark');
-    assert.equal(await evaluate('localStorage.getItem("tts_theme")'), 'dark');
-    console.log('PASS switching to dark theme works and updates localStorage');
-
-    // 10. Switch back to sakura theme
-    await evaluate('document.querySelector(\'.theme-option-btn[data-theme="sakura"]\').click()');
-    assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), 'sakura');
-    assert.equal(await evaluate('localStorage.getItem("tts_theme")'), 'sakura');
-    assert.equal(await evaluate('getComputedStyle(document.getElementById("sakuraDecor")).display !== "none"'), true);
-    console.log('PASS switching back to sakura theme works');
-
-    // 11. Close settings modal
-    await evaluate('document.getElementById("modalCloseBtn").click()');
-    await wait('document.getElementById("settingsModal").style.display === "none"');
-    console.log('PASS closing settings modal works');
-
-    // 12. Verify New Reading is absent and Clear text still works
-    assert.equal(await evaluate('Boolean(document.getElementById("newReadingBtn"))'), false);
-    await evaluate('document.getElementById("textInput").value = "Testing clear reset"');
-    await evaluate('document.getElementById("clearTextBtn").click()');
-    assert.equal(await evaluate('document.getElementById("textInput").value'), '');
-    console.log('PASS New Reading is absent and Clear text resets input');
-
-    // 13. Verify cute cat illustration in sidebar & reading banner in center
-    assert.equal(await evaluate('Boolean(document.querySelector(".sidebar-cat-card"))'), true);
-    assert.equal(await evaluate('Boolean(document.querySelector(".work-reading-banner"))'), true);
-    assert.equal(await evaluate('Boolean(document.querySelector(".explain-empty-card"))'), true);
-    assert.equal(await evaluate('Boolean(document.querySelector(".explain-sync-strip"))'), false);
-    console.log('PASS decorative cards remain and explain sync strip is absent');
-
-    // 14. Verify mobile viewport has no splitter or horizontal overflow
-    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-    assert.equal(await evaluate('getComputedStyle(document.getElementById("workspaceSplitter")).display'), 'none');
-    assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), true);
-    console.log('PASS mobile responsive layout has no horizontal overflow');
 
     assert.deepEqual(exceptions, []);
     console.log('PASS all theme and sidebar tests passed with 0 exceptions');
