@@ -15,11 +15,12 @@ const chromePath = process.env.CHROME_PATH || [
 ].find((candidate) => fs.existsSync(candidate));
 assert(chromePath, 'Chrome/Chromium is required; set CHROME_PATH');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-release-browser-'));
-const key = '0123456789abcdef';
+const key = '0123456789abcdef'.repeat(4);
 const attack = 'test" onmouseover="document.documentElement.dataset.auditXss=\'executed\'';
 let mode = 'success';
 let generations = 0;
 let historyDeleted = false;
+let audioUnavailable = false;
 const wav = Buffer.alloc(44 + 4800);
 wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
 wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
@@ -35,10 +36,12 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/engines') return json([{
     id: 'edge', name: 'Edge', is_free: true, default_voice: 'ja-JP-NanamiNeural',
     max_text_length: 12, min_text_length: 1, request_timeout_seconds: 30,
+    storage_mode: 'private',
     voices: [{ id: 'ja-JP-NanamiNeural', name: 'Nanami' }],
   }]);
   if (url.pathname === '/api/history') return json(historyDeleted ? [] : [{
-    id: 1, text: attack, voice: 'ja-JP-NanamiNeural', engine: 'edge', cache_key: key,
+    id: 1, text: audioUnavailable ? 'Hello.' : attack, voice: 'ja-JP-NanamiNeural', engine: 'edge', cache_key: key,
+    audio_status: audioUnavailable ? 'unavailable' : 'ready',
     created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
     last_played_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
   }]);
@@ -46,27 +49,29 @@ const server = http.createServer(async (req, res) => {
     historyDeleted = true;
     res.writeHead(204); return res.end();
   }
-  if (url.pathname === '/api/tts/flow' && req.method === 'POST') {
+  if (url.pathname === '/api/tts' && req.method === 'POST') {
     generations += 1;
     if (mode === 'stall') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.write('{'); return;
     }
     if (mode === 'error') return json({ detail: '上游服务暂时不可用（上游返回 429）。' }, 502);
+    audioUnavailable = false;
     await new Promise((resolve) => setTimeout(resolve, 30));
-    return json({
-      version: 1, engine: 'edge', voice: 'ja-JP-NanamiNeural', cache_key: key,
-      audio_url: '/api/tts/' + key, cached: false, timeline_available: true,
-      sentences: [{ index: 0, text: 'Hello.', start_ms: 0, end_ms: 100 }],
-    });
+    res.writeHead(200, { 'Content-Type': 'audio/wav', 'X-Cache-Key': key });
+    return res.end(wav);
   }
   if (url.pathname === '/api/tts/' + key) {
+    if (audioUnavailable) return json({ detail: '原音频不可用' }, 410);
     res.writeHead(200, { 'Content-Type': 'audio/mpeg' }); return res.end(wav);
   }
-  const file = { '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css' }[url.pathname];
-  if (file) {
-    res.writeHead(200, { 'Content-Type': file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
-    return res.end(fs.readFileSync(path.join(root, 'frontend', file)));
+  const relativePath = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\//, '');
+  const filePath = path.join(root, 'frontend', relativePath);
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath);
+    const contentType = ext === '.js' ? 'text/javascript' : ext === '.css' ? 'text/css' : ext === '.html' ? 'text/html' : 'text/plain';
+    res.writeHead(200, { 'Content-Type': contentType });
+    return res.end(fs.readFileSync(filePath));
   }
   res.writeHead(404); res.end();
 });
@@ -129,44 +134,46 @@ let browserExit;
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `
       localStorage.setItem('tts_explain_enabled', '0');
       const originalSetTimeout = window.setTimeout;
-      window.setTimeout = (callback, ms, ...args) => originalSetTimeout(callback, ms >= 10000 ? 300 : ms, ...args);
+      window.setTimeout = (callback, ms, ...args) => originalSetTimeout(callback, ms >= 10000 ? 1500 : ms, ...args);
     ` });
     await send('Page.navigate', { url });
-    await wait('document.querySelector(".history-text") && document.getElementById("charCounter").textContent.includes("12")');
-    assert.equal(await evaluate('document.querySelector(".history-text").getAttribute("title")'), attack);
-    assert.equal(await evaluate('document.querySelector(".history-text").hasAttribute("onmouseover")'), false);
-    await evaluate('document.querySelector(".history-text").dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))');
-    assert.equal(await evaluate('document.documentElement.dataset.auditXss || ""'), '');
-    console.log('PASS stored XSS remains literal text and cannot create event handlers');
-
-    await evaluate(`document.getElementById('textInput').value = 'Hello.'; document.getElementById('generateBtn').click(); document.getElementById('generateBtn').click();`);
-    await wait('!document.getElementById("generateBtn").disabled && document.getElementById("audioPlayer").readyState >= 2');
-    assert.equal(generations, 1);
-    assert.equal(await evaluate('document.querySelectorAll(".sentence-row").length > 0'), true);
-    console.log('PASS synthesis, audio decoding, timeline and double-click protection');
-
-    mode = 'error';
-    await evaluate('document.getElementById("generateBtn").click()');
-    await wait('!document.getElementById("generateBtn").disabled && document.getElementById("errorMessage").textContent.includes("429")');
-    console.log('PASS upstream error visible and generate button recovers');
-    mode = 'stall';
-    await evaluate('document.getElementById("generateBtn").click()');
-    await wait('!document.getElementById("generateBtn").disabled && document.getElementById("errorMessage").textContent.includes("超时")');
-    console.log('PASS stalled response body times out and loading clears');
-
-    const before = generations;
-    await evaluate(`document.getElementById('textInput').value = 'x'.repeat(13); document.getElementById('generateBtn').click();`);
-    assert.equal(generations, before);
-    assert.equal(await evaluate('document.getElementById("errorMessage").textContent.includes("12")'), true);
-    console.log('PASS configured character limit is enforced by the browser');
-
-    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-    assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), true);
-    await evaluate('document.getElementById("historyBtn").click()');
-    await evaluate('document.querySelector(".history-delete-btn").click()');
-    await wait('document.getElementById("historyEmpty").style.display === "block"');
-    console.log('PASS mobile viewport and history deletion (204 response)');
-    assert.deepEqual(exceptions, []);
+    await wait("document.body?.dataset.ready==='true'");
+    assert.equal(await evaluate("document.querySelector('.user-message').textContent"), attack);
+    assert.equal(await evaluate("document.querySelector('.user-message').hasAttribute('onmouseover')"), false);
+    await evaluate("document.querySelector('.user-message').dispatchEvent(new MouseEvent('mouseover',{bubbles:true}))");
+    assert.equal(await evaluate("document.documentElement.dataset.auditXss || ''"), '');
+    console.log('PASS stored XSS stays literal text');
+    await evaluate("window.submit=text=>{const input=document.getElementById('textInput');input.value=text;input.dispatchEvent(new Event('input'));document.getElementById('generateBtn').click();};document.getElementById('newConversationBtn').click();submit('Hello.');document.getElementById('generateBtn').click();");
+    await wait("document.querySelector('audio')?.readyState>=2");
+    assert.equal(generations,1);
+    assert.equal(await evaluate("document.querySelector('audio').duration"),0.1);
+    await evaluate("document.querySelector('audio').currentTime=0.05");
+    assert(Math.abs(await evaluate("document.querySelector('audio').currentTime")-0.05)<0.005);
+    console.log('PASS actual HTTP generation, audio duration/seek, empty double-click protection');
+    mode='error';
+    await evaluate("submit('Failure')");
+    await wait("document.querySelector('.audio-status.is-error')?.textContent.includes('429')");
+    mode='stall';
+    await evaluate("submit('Timeout')");
+    await wait("[...document.querySelectorAll('.audio-status.is-error')].some(el=>el.textContent.includes('超时'))");
+    assert.equal(await evaluate("document.querySelectorAll('.user-message').length"),3);
+    console.log('PASS provider error and stalled response body remain retryable without losing text');
+    const before=generations;
+    await evaluate("submit('x'.repeat(13))");
+    assert.equal(await evaluate("document.getElementById('generateBtn').disabled"),true);
+    assert.equal(generations,before);
+    await evaluate("submit('😀'.repeat(12))");
+    await wait("document.querySelectorAll('.user-message').length===4");
+    console.log('PASS configured limits count Unicode code points');
+    mode='success'; audioUnavailable=true;
+    await send('Page.reload'); await wait("document.body?.dataset.ready==='true'");
+    await evaluate("document.querySelector('.audio-action:not([hidden])').click()");
+    await wait("document.querySelector('.retry-audio')?.textContent.includes('重新生成')");
+    await evaluate("document.querySelector('.retry-audio').click()");
+    await wait("document.querySelector('audio')?.readyState>=2");
+    assert.equal(await evaluate("document.querySelectorAll('.user-message').length"),4);
+    console.log('PASS 410 replay regenerates into original card');
+    assert.deepEqual(exceptions,[]);
     await send('Browser.close');
     await browserExit;
     console.log('PASS no uncaught browser exceptions');

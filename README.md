@@ -1,7 +1,7 @@
 # TTS Web (v0.2) 🎙️
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
+  <a href="README.md">English</a> | <a href="docs/i18n/README_zh.md">简体中文</a>
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@ It provides an out-of-the-box dual-engine architecture: completely free and keyl
 
 AI Reading Copilot is a separate, server-funded multi-model feature. Its browser model and
 model-specific reasoning selectors are driven by a backend allowlist; browser-supplied LLM keys are
-never accepted. See [COPILOT_DEPLOYMENT.md](COPILOT_DEPLOYMENT.md) before enabling it publicly.
+never accepted. See [COPILOT_DEPLOYMENT.md](docs/deployment/COPILOT_DEPLOYMENT.md) before enabling it publicly.
 
 ---
 
@@ -82,7 +82,7 @@ never accepted. See [COPILOT_DEPLOYMENT.md](COPILOT_DEPLOYMENT.md) before enabli
 
 ---
 
-For public deployment, limits and recovery, read [Stable release deployment](docs/STABLE_RELEASE.md).
+For public deployment, limits and recovery, read [Stable release deployment](docs/releases/STABLE_RELEASE.md).
 
 ## 🚀 Quick Start
 
@@ -99,7 +99,7 @@ Open your browser and navigate to:
 http://localhost:8000
 ```
 
-> **Note**: Audio caches and SQLite history records are automatically persisted in `./backend/app/cache`.
+> **Note**: Docker Compose persists audio caches and SQLite history records in `./backend/app/cache` on the host, mounted at `/app/src/app/cache` in the container. This keeps existing data accessible when upgrading from the earlier backend layout. Local runs use `./src/app/cache`.
 
 ---
 
@@ -124,14 +124,14 @@ uv sync --frozen
 #### 3. (Optional) Configure environment variables
 If you need server-side Gemini credentials, also configure SERVER_KEY_ACCESS_TOKEN as described in the deployment guide:
 ```bash
-cp backend/.env.example backend/.env
-# Edit backend/.env and set GEMINI_API_KEY
+cp .env.example .env
+# Edit .env and set GEMINI_API_KEY
 ```
 *(If you only use Edge TTS or prefer providing the API Key via the web UI, you can skip this step.)*
 
 #### 4. Run the server
 ```bash
-uv run uvicorn app.main:app --reload --app-dir backend --port 8000
+uv run uvicorn app.main:app --reload --app-dir src --port 8000
 ```
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser. Interactive API documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
@@ -140,7 +140,7 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser. Interactive
 
 ## ⚙️ Configuration & Environment Variables
 
-Create or edit `backend/.env`:
+Create or edit `.env`:
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |

@@ -2,21 +2,21 @@
 
 ## Project Structure & Module Organization
 
-The FastAPI application lives in `backend/app`. HTTP routes are grouped in `api/`, Pydantic request and response models in `schemas/`, and TTS, caching, and history logic in `services/`. Provider implementations belong in `backend/app/services/engines/` and should implement the shared base interface. Backend tests are in `backend/tests/`. The browser client is dependency-free and consists of `frontend/index.html`, `frontend/app.js`, and `frontend/style.css`. Root-level Docker files support containerized runs; `README.md` and `DEVELOPMENT.md` document usage and architecture.
+The FastAPI application lives in `src/app`. HTTP routes are grouped in `api/`, Pydantic request and response models in `schemas/`, and TTS, caching, and history logic in `services/`. Provider implementations belong in `src/app/services/engines/` and should implement the shared base interface. Backend tests are in `tests/`. The browser client is dependency-free and consists of `frontend/index.html`, `frontend/app.js`, and modular ES modules/CSS files in `frontend/`. Root-level Docker files support containerized runs; `README.md` and docs in `docs/` document usage and architecture.
 
 ## Build, Test, and Development Commands
 
 - `uv sync --dev` installs locked runtime and test dependencies from `uv.lock`.
-- `Copy-Item backend/.env.example backend/.env` creates a local configuration file.
+- `Copy-Item .env.example .env` creates a local configuration file.
 - Run dev server:
-  - With uv: `uv run uvicorn app.main:app --reload --app-dir backend --port 8000`
-  - Direct fallback: `& ".\.venv\Scripts\python.exe" -m uvicorn app.main:app --reload --app-dir backend --port 8000`
+  - With uv: `uv run uvicorn app.main:app --reload --app-dir src --port 8000`
+  - Direct fallback: `& ".\.venv\Scripts\python.exe" -m uvicorn app.main:app --reload --app-dir src --port 8000`
 - Run backend tests:
   - With uv: `uv run pytest`
-  - Direct fallback: `& ".\.venv\Scripts\python.exe" -m pytest backend/tests`
+  - Direct fallback: `& ".\.venv\Scripts\python.exe" -m pytest tests`
 - Run focused test:
-  - With uv: `uv run pytest backend/tests/test_api.py -k health`
-  - Direct fallback: `& ".\.venv\Scripts\python.exe" -m pytest backend/tests/test_api.py -k health`
+  - With uv: `uv run pytest tests/test_api.py -k health`
+  - Direct fallback: `& ".\.venv\Scripts\python.exe" -m pytest tests/test_api.py -k health`
 - `docker compose up -d --build` builds and starts the containerized application.
 
 > **Environment Note for AI Agents**: If `uv` is not found in your shell PATH or script execution is restricted, do NOT waste turns or tokens diagnosing the system environment or running activation scripts. Directly invoke Python through the existing project virtual environment: `& ".\.venv\Scripts\python.exe" -m <module>`.

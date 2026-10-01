@@ -12,6 +12,7 @@ env
 
 # Tests & Cache
 .pytest_cache
+.pytest_*
 .coverage
 htmlcov
 .ruff_cache
@@ -27,6 +28,7 @@ backend/app/cache
 # Local Configurations & Secrets
 .env
 .env.*
+secrets
 *.pem
 *.key
 
