@@ -99,7 +99,7 @@ Open your browser and navigate to:
 http://localhost:8000
 ```
 
-> **Note**: Audio caches and SQLite history records are automatically persisted in `./src/app/cache`.
+> **Note**: Docker Compose persists audio caches and SQLite history records in `./backend/app/cache` on the host, mounted at `/app/src/app/cache` in the container. This keeps existing data accessible when upgrading from the earlier backend layout. Local runs use `./src/app/cache`.
 
 ---
 

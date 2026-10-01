@@ -153,6 +153,19 @@ let failures = 0;
     assert.equal(await evaluate("store.list().length"), 3);
     await evaluate("window.firstId=store.list().find(c=>c.messages.length===2&&c.title!=='历史记录').id;window.secondId=current().id;select(firstId);");
     assert.equal(await evaluate("document.querySelectorAll('.user-message').length"), 2);
+    const playerListenerCounts = async () => {
+      const result = await send('Runtime.evaluate', {
+        expression: "({mousemove:(getEventListeners(window).mousemove||[]).length,mouseup:(getEventListeners(window).mouseup||[]).length})",
+        includeCommandLineAPI: true, returnByValue: true,
+      });
+      assert(!result.exceptionDetails, JSON.stringify(result.exceptionDetails));
+      return result.result.value;
+    };
+    const listenersBeforeSwitching = await playerListenerCounts();
+    await evaluate("for(let i=0;i<8;i++){select(secondId);select(firstId)}");
+    assert.deepEqual(await playerListenerCounts(), listenersBeforeSwitching,
+      'Switching conversations must release the old players\' global mouse listeners');
+    console.log('PASS repeated conversation switches do not accumulate player listeners');
     await evaluate("document.querySelector('.audio-action').click();take('/api/tts/'+'c'.repeat(64)).resolve(json({detail:'expired'},404));");
     await wait("document.querySelector('.retry-audio')?.textContent.includes('重新生成')");
     assert.equal(await evaluate("current().messages[0].text"), 'こんにちは。今日はいい天気ですね。');

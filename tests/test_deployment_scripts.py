@@ -4,12 +4,43 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.skipif(shutil.which("docker") is None, reason="Docker CLI is unavailable")
+def test_compose_upgrade_keeps_existing_history_and_audio(tmp_path):
+    old_cache = tmp_path / "backend" / "app" / "cache"
+    (old_cache / "audio").mkdir(parents=True)
+    with sqlite3.connect(old_cache / "history.db") as connection:
+        connection.execute("create table upgrade_fixture (text text)")
+        connection.execute("insert into upgrade_fixture values ('existing history')")
+    (old_cache / "audio" / "0123456789abcdef.mp3").write_bytes(b"existing audio")
+    empty_env = tmp_path / "empty.env"
+    empty_env.write_text("", encoding="utf-8")
+    env = os.environ.copy()
+    for name in ("DEEPSEEK_API_KEY", "ZHIPU_API_KEY", "QWEN_API_KEY", "AUTH_PROXY_SECRET",
+                 "GEMINI_API_KEY", "SERVER_KEY_ACCESS_TOKEN", "REDIS_URL", "TTS_SECRETS_DIR"):
+        env[name] = ""
+        env[f"{name}_FILE"] = ""
+    result = subprocess.run(
+        ["docker", "compose", "--env-file", str(empty_env), "--project-directory",
+         str(tmp_path), "-f", str(ROOT / "docker-compose.yml"), "config", "--format", "json"],
+        env=env, capture_output=True, text=True, check=True, timeout=30,
+    )
+    service = json.loads(result.stdout)["services"]["tts-web"]
+    cache_mount, = [v for v in service["volumes"] if v["target"] == "/app/src/app/cache"]
+    mounted_cache = Path(cache_mount["source"])
+    database = mounted_cache / "history.db"
+    assert database.is_file(), "Compose upgrade must keep mounting the existing history database"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("select text from upgrade_fixture").fetchone() == ("existing history",)
+    assert (mounted_cache / "audio" / "0123456789abcdef.mp3").read_bytes() == b"existing audio"
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="Docker CLI is unavailable")

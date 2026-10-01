@@ -163,12 +163,14 @@ export class MessagePlayer {
       isDragging = true;
       seek(e);
     });
-    window.addEventListener('mousemove', (e) => {
+    this.onMouseMove = (e) => {
       if (isDragging) seek(e);
-    });
-    window.addEventListener('mouseup', () => {
+    };
+    this.onMouseUp = () => {
       isDragging = false;
-    });
+    };
+    window.addEventListener('mousemove', this.onMouseMove);
+    window.addEventListener('mouseup', this.onMouseUp);
 
     this.button.addEventListener('click', async () => {
       if (this.loading) return;
@@ -215,6 +217,8 @@ export class MessagePlayer {
 
   dispose() {
     this.disposed = true;
+    window.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('mouseup', this.onMouseUp);
     this.audio.pause();
     this.audio.removeAttribute('src');
     this.audio.load();

@@ -68,7 +68,8 @@ services:
       HISTORY_MAX_RECORDS: ${HISTORY_MAX_RECORDS:-10000}
       EXPLANATION_MAX_RECORDS: ${EXPLANATION_MAX_RECORDS:-1000}
     volumes:
-      - ./src/app/cache:/app/src/app/cache
+      # Keep the existing host directory when upgrading to the src layout.
+      - ./backend/app/cache:/app/src/app/cache
       - "${TTS_SECRETS_DIR:-./secrets}:/run/secrets:ro"
     logging:
       driver: json-file

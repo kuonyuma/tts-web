@@ -95,7 +95,7 @@ docker compose up -d
 http://localhost:8000
 ```
 
-> **说明**：生成的音频缓存与 SQLite 历史数据将自动持久化挂载至本地 `./src/app/cache` 目录。
+> **说明**：Docker Compose 将音频缓存与 SQLite 历史数据持久化到宿主机的 `./backend/app/cache`，并挂载到容器内的 `/app/src/app/cache`，升级后可继续访问旧数据。本地直接运行时使用 `./src/app/cache`。
 
 ---
 
