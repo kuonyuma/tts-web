@@ -19,8 +19,8 @@ from app.config import settings
 from app.main import app
 from app.services import cache_service as cache, explain_service as explain, history_service as history, runtime
 from app.services.engines.base import SentenceCue, TimedSynthesisResult
-from app.services.engines.edge_engine import EdgeTTSEngine
-from app.services.errors import StorageFullError, TTSBusyError, TTSTimeoutError, TTSUpstreamError
+from app.services.errors import StorageFullError, TTSBusyError, TTSTimeoutError
+from app.services.llm.types import LLMResult
 
 KEY = "0123456789abcdef"
 HEADERS = {"X-Client-ID": "release-client"}
@@ -173,7 +173,13 @@ async def test_empty_timeline_is_cached():
 async def test_explain_and_chat_duplicate_requests_do_not_repeat_billing():
     async def generate(**kwargs):
         await asyncio.sleep(0.02)
-        return "explanation"
+        profile, mode = explain.resolve_selection(kwargs.get("model_id"), kwargs.get("mode_id"))
+        return (
+            LLMResult("explanation", profile.provider, profile.upstream_model, {}),
+            profile.id,
+            mode.id,
+            profile.profile_revision,
+        )
 
     fake = AsyncMock(side_effect=generate)
     chat = AsyncMock(side_effect=generate)
@@ -249,7 +255,7 @@ async def test_database_lock_does_not_block_health_and_recovers(monkeypatch):
 
 
 @pytest.mark.parametrize("paired", [False, True])
-def test_failed_disk_write_never_produces_a_memory_hit(monkeypatch, paired):
+def test_failed_disk_write_never_produces_a_memory_hit(paired):
     original = cache._write_temp
 
     def fail(path, data):
@@ -314,7 +320,7 @@ def test_history_quota_does_not_delete_existing_records(monkeypatch):
 def test_chat_storage_serializes_read_modify_write():
     explain.save_explanation("one", "hello", "en", KEY, "explained")
     with ThreadPoolExecutor(max_workers=6) as pool:
-        results = list(pool.map(lambda n: explain.append_chat_messages("one", KEY, f"q{n}", f"a{n}"), range(6)))
+        list(pool.map(lambda n: explain.append_chat_messages("one", KEY, f"q{n}", f"a{n}"), range(6)))
     messages = explain.get_explanation("one", KEY)["messages"]
     assert len(messages) == 12
     assert {m["content"] for m in messages if m["role"] == "user"} == {f"q{n}" for n in range(6)}
@@ -392,7 +398,7 @@ def test_real_sdk_success_with_ffmpeg(monkeypatch, mime):
             content = {"type": "text", "text": "explained"}
         return httpx.Response(200, json={"id": "audit", "status": "completed", "steps": [{"type": "model_output", "content": [content]}]})
 
-    created, requests = mock_gemini_sdk(monkeypatch, handler)
+    created, _ = mock_gemini_sdk(monkeypatch, handler)
     response = client.post("/api/tts", json={"text": "Gemini PCM", "engine": "gemini"}, headers={"X-Gemini-Api-Key": "fake-key"})
     assert response.status_code == 200
     assert response.content.startswith((b"ID3", b"\xff"))
@@ -428,7 +434,7 @@ def test_legacy_migration_preserves_records_and_default_rows_are_private():
     assert TestClient(app).get("/api/history").status_code == 422
 
 
-def test_migration_failure_rolls_back_original_table(monkeypatch):
+def test_migration_failure_rolls_back_original_table():
     # A legacy NOT NULL violation must not leave the original table dropped.
     with sqlite3.connect(history.DB_PATH) as conn:
         conn.execute("create table history (id integer primary key, text text, voice text, model text, cache_key text, created_at text, last_played_at text)")
@@ -462,7 +468,7 @@ def test_real_sdk_total_deadline_and_close(monkeypatch, endpoint):
     async def handler(request):
         await asyncio.sleep(10)
 
-    created, requests = mock_gemini_sdk(monkeypatch, handler)
+    created, _ = mock_gemini_sdk(monkeypatch, handler)
     payload = {"api_key": "fake-key"} if endpoint.endswith("test-key") else {"text": "deadline", "engine": "gemini"}
     start = time.monotonic()
     response = client.post(endpoint, json=payload, headers={"X-Gemini-Api-Key": "fake-key"})

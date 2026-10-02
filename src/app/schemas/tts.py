@@ -47,10 +47,6 @@ class TTSRequest(BaseModel):
         return self
 
 
-class ErrorResponse(BaseModel):
-    detail: str
-
-
 class VoiceInfoResponse(BaseModel):
     id: str
     name: str

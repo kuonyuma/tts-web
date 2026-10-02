@@ -95,7 +95,7 @@ export async function apiFetch(url, options = {}, timeoutOverride = null) {
   }
 }
 
-export async function handleResponseError(response, options = {}) {
+export async function handleResponseError(response) {
   let errorDetail = "音频生成失败，请重试。";
   try {
     const data = await response.json();
@@ -108,11 +108,6 @@ export async function handleResponseError(response, options = {}) {
     } else if (response.status === 504) {
       errorDetail = "请求超时，请缩短文本后重试。";
     }
-  }
-
-  // If missing API Key, trigger modal callback if provided
-  if (response.status === 400 && errorDetail.includes("API Key") && typeof options.onApiKeyMissing === "function") {
-    options.onApiKeyMissing();
   }
 
   throw new Error(errorDetail);

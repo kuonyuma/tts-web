@@ -102,7 +102,6 @@
 .audio-status { font-size: 12px; color: var(--chat-muted); }
 .audio-status.is-error { color: var(--error-text); }
 .audio-action { border: 0; background: var(--chat-tint); color: var(--chat-accent); border-radius: 6px; padding: 5px 10px; margin-top: 8px; font-size: 12px !important; }
-.audio-download { display: none; }
 .pending-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--chat-accent); margin-right: 8px; animation: pending-pulse 1.2s ease-in-out infinite; }
 @keyframes pending-pulse { 50% { opacity: .3; } }
 .chat-empty { max-width: 480px; margin: clamp(25px, 12vh, 140px) auto 20px; }
@@ -137,12 +136,9 @@
 .ai-context { padding: 14px 18px 10px; border-bottom: 1px solid var(--chat-line); }
 .ai-context-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .eyebrow { font-size: 10px; font-weight: 600; color: var(--chat-muted); letter-spacing: 1px; text-transform: uppercase; }
-.ai-retry-btn { font-size: 11px; padding: 3px 8px; color: var(--chat-accent); background: var(--chat-tint); border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s ease; border: 1px solid transparent; }
-.ai-retry-btn:hover:not(:disabled) { background: var(--chat-accent); color: #fff; }
 .retry-icon { font-size: 12px; line-height: 1; }
 .ai-target-box { background: var(--bg-card); border: 1px solid var(--chat-line); border-left: 3px solid var(--chat-accent); border-radius: 8px; padding: 10px 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02); }
 .ai-target-box p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--text-primary); max-height: 58px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-.ai-options { display: flex; flex-direction: column; gap: 8px; padding: 10px 18px; border-bottom: 1px solid var(--chat-line); background: var(--bg-subtle); }
 .ai-options-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .auto-explain { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; color: var(--text-secondary); cursor: pointer; user-select: none; }
 .auto-explain input[type="checkbox"] { accent-color: var(--chat-accent); width: 14px; height: 14px; margin: 0; cursor: pointer; }

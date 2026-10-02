@@ -1,19 +1,10 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { spawn } = require('node:child_process');
+const { launchBrowser, delay } = require('./browser_test_helper.cjs');
 
 const root = path.resolve(__dirname, '..');
-const chromePath = process.env.CHROME_PATH || [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
-].find(candidate => fs.existsSync(candidate));
-assert(chromePath, 'Chrome/Chromium is required; set CHROME_PATH');
-
-const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-popover-test-'));
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -63,61 +54,16 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404); res.end();
 });
 
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 let browser;
-let socket;
 
 (async () => {
   try {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const url = `http://127.0.0.1:${server.address().port}/`;
-    browser = spawn(chromePath, [
-      '--headless=new', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0',
-      '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
-      '--autoplay-policy=no-user-gesture-required', 'about:blank',
-    ], { windowsHide: true, stdio: 'ignore' });
-
-    const portFile = path.join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 200 && !fs.existsSync(portFile); i++) await delay(50);
-    assert(fs.existsSync(portFile), 'Browser debugging endpoint did not start');
-    const port = fs.readFileSync(portFile, 'utf8').split(/\r?\n/)[0];
-    const tab = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
-    socket = new WebSocket(tab.webSocketDebuggerUrl);
-    await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
-
-    let id = 0;
-    const pending = new Map();
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.id) {
-        const entry = pending.get(data.id);
-        pending.delete(data.id);
-        if (entry) data.error ? entry.reject(data.error) : entry.resolve(data.result);
-      }
-    };
-
-    const send = (method, params = {}) => new Promise((resolve, reject) => {
-      const callId = ++id;
-      pending.set(callId, { resolve, reject });
-      socket.send(JSON.stringify({ id: callId, method, params }));
+    browser = await launchBrowser({
+      profilePrefix: 'tts-popover-test-', args: ['--autoplay-policy=no-user-gesture-required'],
     });
-
-    const evaluate = async (expression) => {
-      const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (result.exceptionDetails) {
-        throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
-      }
-      return result.result.value;
-    };
-
-    const wait = async (expression, timeout = 5000) => {
-      const start = Date.now();
-      while (Date.now() - start < timeout) {
-        if (await evaluate(expression)) return;
-        await delay(50);
-      }
-      throw new Error('Timeout waiting for: ' + expression);
-    };
+    const { send, evaluate, wait } = browser;
 
     await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', {
@@ -219,9 +165,11 @@ let socket;
 
     console.log('ALL AI SETTINGS POPOVER TESTS PASSED SUCCESSFULLY!');
   } finally {
-    if (socket) socket.close();
-    if (browser) browser.kill();
-    server.close();
-    try { fs.rmSync(profile, { recursive: true, force: true }); } catch {}
+    try {
+      await browser?.close();
+    } finally {
+      server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+    }
   }
 })();

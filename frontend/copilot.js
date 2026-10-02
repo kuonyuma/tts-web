@@ -37,7 +37,6 @@ let explainModelSelect = null;
 let explainThinkingSelect = null;
 let explainSection = null;
 let explainMessages = null;
-let explainRetryBtn = null;
 let explainChatInput = null;
 let explainSendBtn = null;
 let explainOptionsToggleBtn = null;
@@ -55,15 +54,6 @@ export function setOptionsPopoverVisible(visible) {
     explainOptionsToggleBtn?.setAttribute("aria-expanded", "false");
     explainOptionsToggleBtn?.classList.remove("active");
   }
-}
-
-let callbacks = {
-  onStateChange: () => {},
-  onActionTrigger: () => {},
-};
-
-export function isExplainEnabled() {
-  return explainEnabled;
 }
 
 export function isExplainLoading() {
@@ -103,7 +93,6 @@ function invalidateExplainSession() {
   explainLoading = false;
   chatPending = false;
   cancelExplainReveal();
-  callbacks.onStateChange({ explainLoading, chatPending });
   updateExplainInputState();
   return explainGeneration;
 }
@@ -203,7 +192,6 @@ export function updateExplainInputState() {
   const busy = explainLoading || chatPending || !explainModel || !currentExplainText;
   if (explainSendBtn) explainSendBtn.disabled = busy;
   if (explainChatInput) explainChatInput.disabled = busy;
-  if (explainRetryBtn) explainRetryBtn.disabled = busy;
   const bubbleRetryBtns = document.querySelectorAll(".explain-retry-bubble-btn");
   bubbleRetryBtns.forEach((btn) => {
     btn.disabled = busy;
@@ -216,10 +204,6 @@ export function updateExplainInputState() {
   suggestChips.forEach((chip) => {
     chip.disabled = busy;
   });
-}
-
-export function openExplainSection() {
-  // Panel visibility belongs to the layout, independently of requests.
 }
 
 export function renderExplainEmpty() {
@@ -266,7 +250,6 @@ export function renderMarkdown(rawText) {
   let inUl = false;
   let inOl = false;
   let inP = false;
-  let staggerIndex = 0;
 
   function closeList() {
     if (inUl) { output.push("</ul>"); inUl = false; }
@@ -292,7 +275,7 @@ export function renderMarkdown(rawText) {
       closeList();
       closeParagraph();
       const level = Math.min(headingMatch[1].length + 2, 4);
-      output.push(`<h${level} style="--stagger: ${staggerIndex++}">${formatInlineMarkdown(headingMatch[2])}</h${level}>`);
+      output.push(`<h${level}>${formatInlineMarkdown(headingMatch[2])}</h${level}>`);
       continue;
     }
 
@@ -300,7 +283,7 @@ export function renderMarkdown(rawText) {
     if (boldHeadingMatch) {
       closeList();
       closeParagraph();
-      output.push(`<h4 style="--stagger: ${staggerIndex++}">${formatInlineMarkdown(boldHeadingMatch[1])}</h4>`);
+      output.push(`<h4>${formatInlineMarkdown(boldHeadingMatch[1])}</h4>`);
       continue;
     }
 
@@ -308,7 +291,7 @@ export function renderMarkdown(rawText) {
     if (ulMatch) {
       closeParagraph();
       if (inOl) { output.push("</ol>"); inOl = false; }
-      if (!inUl) { output.push(`<ul style="--stagger: ${staggerIndex++}">`); inUl = true; }
+      if (!inUl) { output.push("<ul>"); inUl = true; }
       output.push(`<li>${formatInlineMarkdown(ulMatch[2])}</li>`);
       continue;
     }
@@ -317,7 +300,7 @@ export function renderMarkdown(rawText) {
     if (olMatch) {
       closeParagraph();
       if (inUl) { output.push("</ul>"); inUl = false; }
-      if (!inOl) { output.push(`<ol style="--stagger: ${staggerIndex++}">`); inOl = true; }
+      if (!inOl) { output.push("<ol>"); inOl = true; }
       output.push(`<li>${formatInlineMarkdown(olMatch[2])}</li>`);
       continue;
     }
@@ -326,13 +309,13 @@ export function renderMarkdown(rawText) {
     if (bqMatch) {
       closeList();
       closeParagraph();
-      output.push(`<blockquote style="--stagger: ${staggerIndex++}">${formatInlineMarkdown(bqMatch[1])}</blockquote>`);
+      output.push(`<blockquote>${formatInlineMarkdown(bqMatch[1])}</blockquote>`);
       continue;
     }
 
     closeList();
     if (!inP) {
-      output.push(`<p style="--stagger: ${staggerIndex++}">` + formatInlineMarkdown(trimmed));
+      output.push("<p>" + formatInlineMarkdown(trimmed));
       inP = true;
     } else {
       output.push("<br>" + formatInlineMarkdown(trimmed));
@@ -452,14 +435,9 @@ export function appendExplainBubble(role, content, options = {}) {
   return div;
 }
 
-export function cancelExplainReveal(complete = false) {
+export function cancelExplainReveal() {
   if (!activeExplainReveal) return;
   if (explainRevealFrame !== null) cancelAnimationFrame(explainRevealFrame);
-  if (complete && activeExplainReveal.generation === explainGeneration) {
-    activeExplainReveal.segments.forEach(({ node, chars }) => {
-      node.textContent = chars.join("");
-    });
-  }
   activeExplainReveal.element.classList.remove("is-streaming");
   if (activeExplainReveal.actionsEl) {
     activeExplainReveal.actionsEl.style.display = "";
@@ -506,7 +484,7 @@ export function streamExplainBubble(content, generation = explainGeneration, opt
     let segmentIndex = 0;
     let charIndex = 0;
     let lastPaintAt = 0;
-    activeExplainReveal = { element: div, segments, resolve, generation, actionsEl };
+    activeExplainReveal = { element: div, resolve, actionsEl };
 
     function revealFrame(now) {
       if (generation !== explainGeneration || !activeExplainReveal || activeExplainReveal.element !== div) return;
@@ -615,10 +593,8 @@ export async function requestExplanation(text, opts = {}) {
   currentExplainThinking = thinking;
   currentExplainKey = null;
   updateExplainLangBadge();
-  openExplainSection();
   showExplainLoading();
   explainLoading = true;
-  callbacks.onStateChange({ explainLoading, chatPending });
   updateExplainInputState();
   try {
     const response = await apiFetch("/api/explain", {
@@ -648,51 +624,6 @@ export async function requestExplanation(text, opts = {}) {
   } finally {
     if (generation === explainGeneration) {
       explainLoading = false;
-      callbacks.onStateChange({ explainLoading, chatPending });
-      updateExplainInputState();
-    }
-  }
-}
-
-export async function loadExplanationForReplay(text) {
-  const lang = explainLang;
-  const model = explainModel;
-  const thinking = explainThinking;
-  if (!model || !thinking) return;
-  const generation = invalidateExplainSession();
-  currentExplainText = text;
-  currentExplainLang = lang;
-  currentExplainModel = model;
-  currentExplainThinking = thinking;
-  currentExplainKey = null;
-  updateExplainLangBadge();
-  explainLoading = true;
-  callbacks.onStateChange({ explainLoading, chatPending });
-  updateExplainInputState();
-  try {
-    const response = await apiFetch(
-      `/api/explain?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(lang)}&model_id=${encodeURIComponent(model)}&mode_id=${encodeURIComponent(thinking)}${currentExplainContext ? `&context_id=${encodeURIComponent(currentExplainContext)}` : ''}`,
-      { headers: { "X-Client-ID": getClientId() } },
-      getCopilotRequestTimeoutMs()
-    );
-    if (generation !== explainGeneration) return;
-    if (!response.ok) {
-      hideExplainSection();
-      return;
-    }
-    const data = await response.json();
-    if (generation !== explainGeneration) return;
-    currentExplainKey = data.explain_key;
-    openExplainSection();
-    await renderExplainMessages(data.explanation, data.messages, { generation });
-  } catch (err) {
-    if (generation !== explainGeneration) return;
-    console.error("Explain fetch error:", err);
-    hideExplainSection();
-  } finally {
-    if (generation === explainGeneration) {
-      explainLoading = false;
-      callbacks.onStateChange({ explainLoading, chatPending });
       updateExplainInputState();
     }
   }
@@ -721,7 +652,6 @@ export async function sendExplainChat(customMessage = null, options = {}) {
   const explainKey = currentExplainKey;
   const ownsSession = () => sessionGeneration === explainGeneration && generation === chatGeneration && explainKey === currentExplainKey;
   chatPending = true;
-  callbacks.onStateChange({ explainLoading, chatPending });
   updateExplainInputState();
   if (!isRetry) {
     appendExplainBubble("user", message);
@@ -762,22 +692,18 @@ export async function sendExplainChat(customMessage = null, options = {}) {
   } finally {
     if (ownsSession()) {
       chatPending = false;
-      callbacks.onStateChange({ explainLoading, chatPending });
       updateExplainInputState();
     }
   }
 }
 
-export function initCopilot(userCallbacks = {}) {
-  callbacks = { ...callbacks, ...userCallbacks };
-
+export function initCopilot() {
   explainToggle = document.getElementById("explainToggle");
   explainLangSelect = document.getElementById("explainLangSelect");
   explainModelSelect = document.getElementById("explainModelSelect");
   explainThinkingSelect = document.getElementById("explainThinkingSelect");
   explainSection = document.getElementById("explainSection");
   explainMessages = document.getElementById("explainMessages");
-  explainRetryBtn = document.getElementById("explainRetryBtn");
   explainChatInput = document.getElementById("explainChatInput");
   explainSendBtn = document.getElementById("explainSendBtn");
   explainOptionsToggleBtn = document.getElementById("explainOptionsToggleBtn");
@@ -867,14 +793,6 @@ export function initCopilot(userCallbacks = {}) {
   updateExplainLangBadge();
   renderExplainEmpty();
 
-  if (explainRetryBtn) {
-    explainRetryBtn.addEventListener("click", () => {
-      if (currentExplainText && !explainLoading && !chatPending) {
-        requestExplanation(currentExplainText, { manual: true });
-      }
-    });
-  }
-
   if (explainSendBtn) {
     explainSendBtn.addEventListener("click", () => sendExplainChat());
   }
@@ -897,15 +815,6 @@ export function initCopilot(userCallbacks = {}) {
       if (prompt) {
         sendExplainChat(prompt);
       }
-    });
-  }
-
-  if (explainMessages) {
-    explainMessages.addEventListener("click", (e) => {
-      const actionBtn = e.target.closest(".explain-action-card");
-      if (!actionBtn) return;
-      const action = actionBtn.getAttribute("data-action");
-      callbacks.onActionTrigger(action);
     });
   }
 }

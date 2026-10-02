@@ -231,8 +231,3 @@ def put_flow_cache(
 def delete_audio_cache(cache_key: str) -> None:
     with _lock:
         _delete(cache_key)
-
-
-def delete_audio_caches(cache_keys: list[str]) -> None:
-    for key in cache_keys:
-        delete_audio_cache(key)

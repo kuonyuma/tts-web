@@ -1,19 +1,10 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { spawn } = require('node:child_process');
+const { launchBrowser, delay } = require('./browser_test_helper.cjs');
 
 const root = path.resolve(__dirname, '..');
-const chromePath = process.env.CHROME_PATH || [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
-].find((candidate) => fs.existsSync(candidate));
-assert(chromePath, 'Chrome/Chromium is required; set CHROME_PATH');
-
-const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-resizer-test-'));
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -39,63 +30,17 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404); res.end();
 });
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let browser;
-let socket;
-let browserExit;
 
 (async () => {
   try {
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const url = `http://127.0.0.1:${server.address().port}/`;
-    browser = spawn(chromePath, [
-      '--headless=new', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0',
-      '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
-      '--autoplay-policy=no-user-gesture-required', 'about:blank',
-    ], { windowsHide: true, stdio: 'ignore' });
-    browserExit = new Promise((resolve) => browser.once('exit', resolve));
-    const portFile = path.join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 200 && !fs.existsSync(portFile); i++) await delay(50);
-    assert(fs.existsSync(portFile), 'Browser debugging endpoint did not start');
-    const port = fs.readFileSync(portFile, 'utf8').split(/\r?\n/)[0];
-    const tab = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
-    socket = new WebSocket(tab.webSocketDebuggerUrl);
-    await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
-
-    let id = 0;
-    const pending = new Map();
-    const exceptions = [];
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.id) {
-        const entry = pending.get(data.id);
-        pending.delete(data.id);
-        if (entry) {
-          if (data.error) entry.reject(data.error);
-          else entry.resolve(data.result);
-        }
-      }
-      if (data.method === 'Runtime.exceptionThrown') {
-        exceptions.push(data.params.exceptionDetails);
-      }
-    };
-    const send = (method, params = {}) => new Promise((resolve, reject) => {
-      const callId = ++id;
-      pending.set(callId, { resolve, reject });
-      socket.send(JSON.stringify({ id: callId, method, params }));
+    browser = await launchBrowser({
+      profilePrefix: 'tts-resizer-test-', args: ['--autoplay-policy=no-user-gesture-required'],
+      waitAttempts: 160, waitMessage: 'UI did not reach expected state: ', exceptionDetailsAsJson: true,
     });
-    const evaluate = async (expression) => {
-      const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      assert(!result.exceptionDetails, JSON.stringify(result.exceptionDetails));
-      return result.result.value;
-    };
-    const wait = async (expression) => {
-      for (let i = 0; i < 160; i++) {
-        if (await evaluate(expression)) return;
-        await delay(50);
-      }
-      throw new Error('UI did not reach expected state: ' + expression);
-    };
+    const { send, evaluate, wait, exceptions } = browser;
 
     await send('Runtime.enable');
     await send('Page.enable');
@@ -272,17 +217,13 @@ let browserExit;
 
     assert.deepEqual(exceptions, []);
     console.log('ALL SIDEBAR RESIZER TESTS PASSED SUCCESSFULLY!');
-    await send('Browser.close');
-    await browserExit;
   } finally {
-    socket?.close();
-    if (browser && browser.exitCode === null) {
-      browser.kill();
-      await Promise.race([browserExit, delay(3000)]);
+    try {
+      await browser?.close();
+    } finally {
+      server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
     }
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
   }
 })().catch((err) => {
   console.error(err);

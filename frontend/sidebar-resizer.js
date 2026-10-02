@@ -37,10 +37,6 @@ let rightWidth = readSavedWidth(RIGHT_STORAGE_KEY, DEFAULT_RIGHT_WIDTH, MIN_RIGH
 let isLeftOpenFn = () => true;
 let isRightOpenFn = () => true;
 
-export function getSidebarWidth(side) {
-  return side === 'left' ? leftWidth : rightWidth;
-}
-
 export function applyWidths() {
   document.documentElement.style.setProperty('--sidebar-left-width', `${leftWidth}px`);
   document.documentElement.style.setProperty('--sidebar-right-width', `${rightWidth}px`);

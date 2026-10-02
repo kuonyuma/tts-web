@@ -30,12 +30,6 @@ export class MessagePlayer {
     this.status = document.createElement('div');
     this.status.className = 'audio-status';
 
-    this.download = document.createElement('a');
-    this.download.className = 'audio-download';
-    this.download.textContent = '下载音频 ↓';
-    this.download.download = `tts-${message.id}.mp3`;
-    this.download.hidden = true;
-
     // 现代高颜值自定义翡翠绿播放条（含 0.75x, 1x, 1.25x 倍速切换）
     this.customPlayer = document.createElement('div');
     this.customPlayer.className = 'custom-player';
@@ -64,7 +58,7 @@ export class MessagePlayer {
       </div>
     `;
 
-    container.append(this.button, this.audio, this.customPlayer, this.status, this.download);
+    container.append(this.button, this.audio, this.customPlayer, this.status);
     players.add(this);
 
     const toggleBtn = this.customPlayer.querySelector('.player-btn-toggle');
@@ -211,7 +205,6 @@ export class MessagePlayer {
     this.customPlayer.hidden = false;
     this.button.hidden = true;
     this.customDownload.href = this.url;
-    this.download.href = this.url;
     this.status.textContent = '';
   }
 

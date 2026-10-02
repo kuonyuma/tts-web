@@ -2,27 +2,14 @@
 // Node 22+ and Chrome/Edge are required; CHROME_PATH can select the executable.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { spawn } = require('node:child_process');
+const { launchBrowser, delay } = require('./browser_test_helper.cjs');
 
 const root = path.resolve(__dirname, '..');
-const chromePath = process.env.CHROME_PATH || [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
-].find(fs.existsSync);
-assert(chromePath, 'Chrome/Edge is required; set CHROME_PATH');
-const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-async-browser-'));
-const keys = { A: 'a'.repeat(64), B: 'b'.repeat(64), C: 'c'.repeat(64) };
+const keys = { A: 'a'.repeat(64), B: 'b'.repeat(64) };
 let catalogTimeout = 300;
 let timestamp = new Date().toISOString();
-const wav = Buffer.alloc(44 + 4800);
-wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
-wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
-wav.writeUInt32LE(24000, 24); wav.writeUInt32LE(48000, 28); wav.writeUInt16LE(2, 32);
-wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(4800, 40);
 const models = ['m1', 'm2'].map((id, index) => ({
   id, name: id, default: index === 0,
   modes: [{ id: 'direct', name: 'Direct', description: '', quota_weight: 1 },
@@ -50,44 +37,18 @@ const server = http.createServer((req, res) => {
   }
   res.writeHead(404); res.end();
 });
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-let browser, browserExit, socket;
+let browser;
 let failures = 0;
 
 (async () => {
   try {
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const url = `http://127.0.0.1:${server.address().port}/`;
-    browser = spawn(chromePath, ['--headless=new', '--remote-debugging-address=127.0.0.1',
-      '--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run',
-      '--no-default-browser-check', '--autoplay-policy=no-user-gesture-required', 'about:blank'],
-    { windowsHide: true, stdio: 'ignore' });
-    browserExit = new Promise((resolve) => browser.once('exit', resolve));
-    const portFile = path.join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 200 && !fs.existsSync(portFile); i++) await delay(25);
-    assert(fs.existsSync(portFile), 'Browser debugging endpoint did not start');
-    const port = fs.readFileSync(portFile, 'utf8').split(/\r?\n/)[0];
-    const tab = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
-    socket = new WebSocket(tab.webSocketDebuggerUrl);
-    await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
-    let callId = 0;
-    const pending = new Map();
-    const exceptions = [];
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.id) {
-        const entry = pending.get(data.id); pending.delete(data.id);
-        if (entry) data.error ? entry.reject(data.error) : entry.resolve(data.result);
-      } else if (data.method === 'Runtime.exceptionThrown') exceptions.push(data.params.exceptionDetails.exception?.description || data.params.exceptionDetails.text);
-    };
-    const send = (method, params = {}) => new Promise((resolve, reject) => {
-      const id = ++callId; pending.set(id, { resolve, reject }); socket.send(JSON.stringify({ id, method, params }));
+    browser = await launchBrowser({
+      profilePrefix: 'tts-async-browser-', args: ['--autoplay-policy=no-user-gesture-required'],
+      exceptionDescriptions: true, startupInterval: 25,
     });
-    const evaluate = async (expression) => {
-      const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      assert(!result.exceptionDetails, result.exceptionDetails?.exception?.description || JSON.stringify(result.exceptionDetails));
-      return result.result.value;
-    };
+    const { send, evaluate, exceptions } = browser;
     const act = (statements) => evaluate(`(async () => { ${statements} })()`);
     // Poll only for observed browser lifecycle/state; response ordering uses explicit deferreds.
     const wait = async (expression) => {
@@ -110,12 +71,9 @@ let failures = 0;
       await send('Page.navigate', { url: url + query });
       await wait(`location.search===${JSON.stringify(query)} && document.body?.dataset.ready==='true' && document.getElementById('explainThinkingSelect')?.value==='direct' && document.getElementById('charCounter')?.textContent.includes('1000')`);
       await evaluate(`(async () => {
-        window.copilot=await import('/copilot.js'); window.app=await import('/app.js');
-        window.player=await import('/player.js'); window.api=await import('/api.js');
-        window.keys=${JSON.stringify(keys)}; window.wav=new Uint8Array(${JSON.stringify(Array.from(wav))});
+        window.copilot=await import('/copilot.js'); window.api=await import('/api.js');
         window.json=(data,status=200,headers={})=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json',...headers}});
         window.explanation=(text,cached=true,messages=[])=>json({explain_key:'key-'+text,explanation:'explanation-'+text,lang:'zh',model_id:'m1',mode_id:'direct',upstream_model:'fixture',cached,messages});
-        window.manifest=(text,headers={})=>json({version:1,cache_key:keys[text],engine:'edge',voice:'ja-JP-NanamiNeural',audio_url:'/api/tts/'+keys[text],cached:true,timeline_available:false,sentences:[]},200,headers);
         window.requests=[]; window.nativeFetch=fetch;
         window.fetch=(url,options={})=>{
           const target=new URL(url,location.href);
@@ -129,8 +87,6 @@ let failures = 0;
         window.take=(path,method='GET')=>{const index=requests.findIndex(r=>r.path===path&&r.method===method);if(index<0)throw new Error('Missing deferred '+method+' '+path);return requests.splice(index,1)[0];};
         window.change=(id,value)=>{const el=document.getElementById(id);if(el.type==='checkbox')el.checked=value;else el.value=value;el.dispatchEvent(new Event('change'));};
         window.messages=()=>document.getElementById('explainMessages').textContent;
-        window.replay=(text)=>document.querySelector('.history-replay-btn[data-cache-key="'+keys[text]+'"]').click();
-        window.check=(value,message)=>{if(!value)throw new Error(message);};
       })()`);
     };
     const test = async (name, run) => {
@@ -180,7 +136,7 @@ let failures = 0;
     for (const action of ['reset', 'close', 'lang', 'model', 'mode']) {
       await test('Pending explanation is invalidated by ' + action, async () => {
         await act(`window.job=copilot.requestExplanation('A',{manual:true});window.request=take('/api/explain','POST');`);
-        await evaluate({ reset: 'copilot.resetExplanation()', close: `change('explainToggle',false)`, lang: `change('explainLangSelect','en')`, model: `change('explainModelSelect','m2')`, mode: `change('explainThinkingSelect','deep')`, edit: `document.getElementById('textInput').value='B';document.getElementById('textInput').dispatchEvent(new Event('input'))` }[action]);
+        await evaluate({ reset: 'copilot.resetExplanation()', close: `change('explainToggle',false)`, lang: `change('explainLangSelect','en')`, model: `change('explainModelSelect','m2')`, mode: `change('explainThinkingSelect','deep')` }[action]);
         await act(`request.resolve(explanation('stale'));await job;`);
         assert.equal(await evaluate('copilot.getCurrentExplainKey()'), null);
         assert.equal(await evaluate(`messages().includes('explanation-stale')`), false);
@@ -195,16 +151,29 @@ let failures = 0;
       assert.equal(await evaluate('copilot.getCurrentExplainText()'), 'A');
       assert.equal(await evaluate('copilot.getCurrentExplainKey()'), 'key-A');
     });
+    await test('Visible explanation retry targets sent text and respects loading', async () => {
+      await act(`copilot.setCurrentExplainText('A');copilot.renderExplainEmpty();document.getElementById('explainEmptyStartBtn').click();window.request=take('/api/explain','POST');`);
+      assert.equal(await evaluate('request.body.text'), 'A');
+      assert.equal(await evaluate('document.getElementById("explainSendBtn").disabled'), true);
+      await act(`request.resolve(explanation('A'));`);
+      await wait(`copilot.getCurrentExplainKey()==='key-A' && !copilot.isExplainLoading()`);
+      assert.equal(await evaluate(`document.querySelector('.explain-retry-bubble-btn').disabled`), false);
+      await act(`document.querySelector('.explain-retry-bubble-btn').click();window.retry=take('/api/explain','POST');`);
+      assert.equal(await evaluate('retry.body.text'), 'A');
+      assert.equal(await evaluate('copilot.isExplainLoading()'), true);
+      await act(`retry.resolve(explanation('retried-A'));`);
+      await wait(`copilot.getCurrentExplainKey()==='key-retried-A' && !copilot.isExplainLoading()`);
+    });
     for (const kind of ['answer', 'error']) {
       await test('Stale chat ' + kind + ' cannot enter replacement session', async () => {
-        await act(`window.job=copilot.loadExplanationForReplay('A');take('/api/explain').resolve(explanation('A'));await job;document.getElementById('explainChatInput').value='question A';window.chat=copilot.sendExplainChat();window.oldChat=take('/api/explain/chat','POST');window.job=copilot.loadExplanationForReplay('B');take('/api/explain').resolve(explanation('B'));await job;`);
+        await act(`window.job=copilot.requestExplanation("A",{manual:true});take('/api/explain','POST').resolve(explanation('A'));await job;document.getElementById('explainChatInput').value='question A';window.chat=copilot.sendExplainChat();window.oldChat=take('/api/explain/chat','POST');window.job=copilot.requestExplanation("B",{manual:true});take('/api/explain','POST').resolve(explanation('B'));await job;`);
         await act(kind === 'answer' ? `oldChat.resolve(json({explain_key:'key-A',answer:'stale-chat',model_id:'m1',mode_id:'direct'}));await chat;` : `oldChat.reject(new Error('stale-chat'));await chat;`);
         assert.equal(await evaluate('copilot.getCurrentExplainKey()'), 'key-B');
         assert.equal(await evaluate(`messages().includes('stale-chat')`), false);
       });
     }
     await test('Older chat finally preserves newer chatPending', async () => {
-      await act(`window.job=copilot.loadExplanationForReplay('A');take('/api/explain').resolve(explanation('A'));await job;document.getElementById('explainChatInput').value='first';window.first=copilot.sendExplainChat();window.r1=take('/api/explain/chat','POST');window.job=copilot.loadExplanationForReplay('B');take('/api/explain').resolve(explanation('B'));await job;document.getElementById('explainChatInput').value='second';window.second=copilot.sendExplainChat();`);
+      await act(`window.job=copilot.requestExplanation("A",{manual:true});take('/api/explain','POST').resolve(explanation('A'));await job;document.getElementById('explainChatInput').value='first';window.first=copilot.sendExplainChat();window.r1=take('/api/explain/chat','POST');window.job=copilot.requestExplanation("B",{manual:true});take('/api/explain','POST').resolve(explanation('B'));await job;document.getElementById('explainChatInput').value='second';window.second=copilot.sendExplainChat();`);
       assert.equal(await evaluate(`requests.some(r=>r.path==='/api/explain/chat')`), true, 'Replacement session must release obsolete chat pending state');
       await act(`window.r2=take('/api/explain/chat','POST');r1.reject(new Error('old'));await first;`);
       assert.equal(await evaluate('copilot.isChatPending()'), true);
@@ -212,8 +181,8 @@ let failures = 0;
       assert.equal(await evaluate('copilot.isChatPending()'), false);
     });
     for (const failure of ['404', 'network']) {
-      await test('Stale replay explanation ' + failure + ' preserves current session', async () => {
-        await act(`window.a=copilot.loadExplanationForReplay('A');window.ra=take('/api/explain');window.b=copilot.loadExplanationForReplay('B');take('/api/explain').resolve(explanation('B'));await b;`);
+      await test('Stale explanation ' + failure + ' preserves current session', async () => {
+        await act(`window.a=copilot.requestExplanation("A",{manual:true});window.ra=take('/api/explain','POST');window.b=copilot.requestExplanation("B",{manual:true});take('/api/explain','POST').resolve(explanation('B'));await b;`);
         await act(failure === '404' ? `ra.resolve(json({detail:'missing'},404));await a;` : `ra.reject(new Error('offline'));await a;`);
         assert.equal(await evaluate('copilot.getCurrentExplainKey()'), 'key-B');
         assert.equal(await evaluate(`messages().includes('explanation-B')`), true);
@@ -234,13 +203,12 @@ let failures = 0;
     // keeps the independent Copilot deadline, session and reveal regressions.
     assert.deepEqual(exceptions, [], 'No uncaught browser exceptions');
     if (failures) throw new Error(`${failures} async state regression(s) failed`);
-    await send('Browser.close'); await browserExit;
   } finally {
-    socket?.close();
-    if (browser && browser.exitCode === null) { browser.kill(); await Promise.race([browserExit, delay(3000)]); }
-    server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));
-    assert.equal(path.dirname(path.resolve(profile)), path.resolve(os.tmpdir()));
-    assert(path.basename(profile).startsWith('tts-async-browser-'));
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+    try {
+      await browser?.close();
+    } finally {
+      server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+    }
   }
 })().catch((error) => { console.error(error); process.exitCode = 1; });
