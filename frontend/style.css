@@ -2,17 +2,14 @@
  * TTS Web - Master Stylesheet
  * 
  * Modular architecture:
- * - theme.css: Design tokens (Minimalist Light & Refined Dark), ambient fields, scrollbars
- * - layout.css: Grid, splitter, controls, input card, banner, modal, responsive rules
- * - player.css: Waveform visualizer, audio player, playback controls
- * - history.css: History drawer, history list, item actions, empty state, cat card
- * - copilot.css: AI explanation panel, chat input, messages, markdown formatting
+ * - theme.css: Light/dark design tokens and scrollbars
+ * - layout.css: Base layout, settings modal, responsive rules
+ * - copilot.css: Explanation messages, markdown formatting, suggestions
+ * - chat.css (loaded by index.html): Conversation layout, sidebars, message player
  */
 
 @import "./theme.css";
 @import "./layout.css";
-@import "./player.css";
-@import "./history.css";
 @import "./copilot.css";
 
 /* Base typography declaration */

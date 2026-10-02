@@ -1,10 +1,10 @@
 /** Conversation coordinator. All asynchronous writes use captured message IDs. */
 import { apiFetch, getClientId, handleResponseError, setRequestTimeoutMs, escapeHtml } from './api.js';
 import { initSettings, loadEngines, getSelectedEngine, getSelectedVoice, getMinCharCount,
-  getMaxCharCount, getApiKey, getEngineLabel, getVoiceLabel, closeSettingsModal,
+  getMaxCharCount, getApiKey, getVoiceLabel, closeSettingsModal,
   isSettingsModalOpen } from './settings.js';
 import { initCopilot, loadCopilotModels, resetExplanation, setCurrentExplainText,
-  renderExplainEmpty, requestExplanation, sendExplainChat } from './copilot.js';
+  renderExplainEmpty, requestExplanation } from './copilot.js';
 import { ConversationStore } from './conversations.js';
 import { MessagePlayer } from './message-player.js';
 import { initSidebarResizers, adjustForAvailableSpace } from './sidebar-resizer.js';

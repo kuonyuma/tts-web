@@ -26,21 +26,12 @@ from app.services.explain_service import (
     save_explanation,
 )
 from app.services.llm.gateway import get_catalog
-from app.services.llm.types import LLMResult
 from app.services.llm.quota import copilot_distributed_lock, reserve_copilot_quota
 from app.services.runtime import cache_lock, llm_request_deadline
 from app.validation import validate_text
 
 
 router = APIRouter(prefix="/api", tags=["explain"])
-
-
-def _generation_parts(value, profile, mode):
-    """Accept a plain string from tests/legacy extensions during the migration."""
-    if isinstance(value, str):
-        result = LLMResult(value, profile.provider, profile.upstream_model, {})
-        return result, profile.id, mode.id, profile.profile_revision
-    return value
 
 
 def _response(key: str, stored: dict, cached: bool) -> ExplainResponse:
@@ -97,10 +88,9 @@ async def explain_sentence(
 
         try:
             await reserve_copilot_quota(x_client_id, mode.quota_weight)
-            generated = await generate_explanation_text(
+            result, model_id, mode_id, revision = await generate_explanation_text(
                 text=request.text, lang=request.lang, model_id=profile.id, mode_id=mode.id,
             )
-            result, model_id, mode_id, revision = _generation_parts(generated, profile, mode)
             await run_in_threadpool(
                 save_explanation,
                 x_client_id,
@@ -186,7 +176,7 @@ async def chat_about_sentence(
                 mode_id=messages[-1]["mode_id"],
             )
         await reserve_copilot_quota(x_client_id, mode.quota_weight)
-        generated = await generate_chat_answer(
+        result, model_id, mode_id, _ = await generate_chat_answer(
             text=stored["text"],
             lang=stored["lang"],
             messages=messages,
@@ -194,7 +184,6 @@ async def chat_about_sentence(
             model_id=stored["model_id"],
             mode_id=mode.id,
         )
-        result, model_id, mode_id, _ = _generation_parts(generated, profile, mode)
         await run_in_threadpool(
             record_usage, x_client_id, result.provider, model_id, mode_id, mode.quota_weight, result.usage
         )

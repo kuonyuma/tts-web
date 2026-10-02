@@ -2,20 +2,12 @@
 // Node 22+ and Chrome/Edge are required; CHROME_PATH can select the executable.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { spawn } = require('node:child_process');
+const { launchBrowser, delay } = require('./browser_test_helper.cjs');
 
 const root = path.resolve(__dirname, '..');
-const chromePath = process.env.CHROME_PATH || [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
-].find(fs.existsSync);
-assert(chromePath, 'Chrome/Edge is required; set CHROME_PATH');
-const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-async-browser-'));
-const keys = { A: 'a'.repeat(64), B: 'b'.repeat(64), C: 'c'.repeat(64) };
+const keys = { A: 'a'.repeat(64), B: 'b'.repeat(64) };
 let catalogTimeout = 300;
 let stallCatalog = false;
 let timestamp = new Date().toISOString();
@@ -52,44 +44,17 @@ const server = http.createServer((req, res) => {
   }
   res.writeHead(404); res.end();
 });
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-let browser, browserExit, socket;
-let failures = 0;
+let browser;
 
 (async () => {
   try {
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const url = `http://127.0.0.1:${server.address().port}/`;
-    browser = spawn(chromePath, ['--headless=new', '--remote-debugging-address=127.0.0.1',
-      '--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run',
-      '--no-default-browser-check', '--autoplay-policy=no-user-gesture-required', 'about:blank'],
-    { windowsHide: true, stdio: 'ignore' });
-    browserExit = new Promise((resolve) => browser.once('exit', resolve));
-    const portFile = path.join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 200 && !fs.existsSync(portFile); i++) await delay(25);
-    assert(fs.existsSync(portFile), 'Browser debugging endpoint did not start');
-    const port = fs.readFileSync(portFile, 'utf8').split(/\r?\n/)[0];
-    const tab = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
-    socket = new WebSocket(tab.webSocketDebuggerUrl);
-    await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
-    let callId = 0;
-    const pending = new Map();
-    const exceptions = [];
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.id) {
-        const entry = pending.get(data.id); pending.delete(data.id);
-        if (entry) data.error ? entry.reject(data.error) : entry.resolve(data.result);
-      } else if (data.method === 'Runtime.exceptionThrown') exceptions.push(data.params.exceptionDetails.exception?.description || data.params.exceptionDetails.text);
-    };
-    const send = (method, params = {}) => new Promise((resolve, reject) => {
-      const id = ++callId; pending.set(id, { resolve, reject }); socket.send(JSON.stringify({ id, method, params }));
+    browser = await launchBrowser({
+      profilePrefix: 'tts-async-browser-', args: ['--autoplay-policy=no-user-gesture-required'],
+      exceptionDescriptions: true, startupInterval: 25,
     });
-    const evaluate = async (expression) => {
-      const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      assert(!result.exceptionDetails, result.exceptionDetails?.exception?.description || JSON.stringify(result.exceptionDetails));
-      return result.result.value;
-    };
+    const { send, evaluate, exceptions } = browser;
     await send('Runtime.enable'); await send('Page.enable');
     await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
     await send('Emulation.setDeviceMetricsOverride', {width:1440,height:960,deviceScaleFactor:1,mobile:false});
@@ -191,7 +156,9 @@ let failures = 0;
     await wait("document.getElementById('explainMessages').textContent.includes('最新の文章です。')");
     assert.equal(await evaluate("document.getElementById('explainMessages').textContent.includes('OLD_TEXT')"), false);
     await evaluate("change('explainToggle',false);click('newConversationBtn');");
-    assert.equal(await evaluate("document.getElementById('explainRetryBtn').disabled"), true);
+    assert.equal(await evaluate("document.getElementById('explainSendBtn').disabled"), true);
+    assert.equal(await evaluate("document.getElementById('explainChatInput').disabled"), true);
+    assert.equal(await evaluate("document.querySelector('#explainMessages .explain-retry-bubble-btn, #explainEmptyStartBtn')"), null);
     assert.equal(await evaluate("requests.filter(r=>r.path==='/api/explain').length"), 0);
     console.log('PASS AI binds sent text only; drafts and panel visibility cause no requests; late results cannot overwrite new context');
 
@@ -200,7 +167,7 @@ let failures = 0;
     assert.equal(await evaluate("store.get(deletedId)"), null);
     console.log('PASS deleting a pending conversation never resurrects it');
 
-    await evaluate("click('newConversationBtn');window.scrollId=current().id;for(let i=0;i<12;i++)submit('滚动测试 '+i);document.getElementById('messageList').scrollTop=0;window.beforeScroll=document.getElementById('messageList').scrollTop;resolveTTS('滚动测试 11');");
+    await evaluate("click('newConversationBtn');for(let i=0;i<12;i++)submit('滚动测试 '+i);document.getElementById('messageList').scrollTop=0;resolveTTS('滚动测试 11');");
     await wait("current().messages[11].audio.status==='ready'");
     assert.equal(await evaluate("document.getElementById('messageList').scrollTop"), 0);
     assert.equal(await evaluate("document.getElementById('jumpToLatestBtn').hidden"), false);
@@ -259,13 +226,12 @@ let failures = 0;
     assert.equal(await evaluate("document.getElementById('generateBtn').disabled"),false);
     console.log('PASS a stalled optional AI catalog cannot block restored conversations or TTS');
     assert.deepEqual(exceptions, [], 'No uncaught browser exceptions');
-    await send('Browser.close'); await browserExit;
   } finally {
-    socket?.close();
-    if (browser && browser.exitCode === null) { browser.kill(); await Promise.race([browserExit, delay(3000)]); }
-    server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));
-    assert.equal(path.dirname(path.resolve(profile)), path.resolve(os.tmpdir()));
-    assert(path.basename(profile).startsWith('tts-async-browser-'));
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+    try {
+      await browser?.close();
+    } finally {
+      server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+    }
   }
 })().catch((error) => { console.error(error); process.exitCode = 1; });

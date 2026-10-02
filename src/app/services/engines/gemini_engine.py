@@ -1,15 +1,11 @@
 import asyncio
 import base64
-import logging
 
 from app.config import settings
 from app.services.engines.base import BaseTTSEngine, VoiceInfo
 from app.services.errors import TTSException, TTSConfigError, TTSTimeoutError, TTSUpstreamError, TTSAudioTooLargeError, provider_error
 from app.services.gemini_client import create_client, managed_client
 from app.services.runtime import request_deadline, upstream_slot
-
-logger = logging.getLogger(__name__)
-
 
 SUPPORTED_VOICES: list[VoiceInfo] = [
     {

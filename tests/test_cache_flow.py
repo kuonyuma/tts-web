@@ -1,5 +1,3 @@
-import json
-import hashlib
 import pytest
 from app.services import cache_service
 from app.services.cache_service import (
@@ -18,12 +16,8 @@ from app.services.engines.base import SentenceCue
 def clean_test_cache():
     test_key = "0123456789abcdef"
     delete_audio_cache(test_key)
-    _memory_cache.pop(test_key, None)
-    _flow_cache.pop(test_key, None)
     yield
     delete_audio_cache(test_key)
-    _memory_cache.pop(test_key, None)
-    _flow_cache.pop(test_key, None)
 
 
 def test_flow_cache_key_distinct():

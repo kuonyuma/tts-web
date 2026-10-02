@@ -57,7 +57,6 @@ class Settings:
         or os.getenv("TTS_API_KEY", "")
     )
     GEMINI_TTS_MODEL: str = os.getenv("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
-    GEMINI_TEXT_MODEL: str = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.8-flash")
     GEMINI_TTS_VOICE: str = os.getenv("GEMINI_TTS_VOICE", "Kore")
     DEEPSEEK_API_KEY: str = secret_value("DEEPSEEK_API_KEY")
     ZHIPU_API_KEY: str = secret_value("ZHIPU_API_KEY")
@@ -125,8 +124,6 @@ class Settings:
             raise ValueError("AUTH_PROXY_SECRET must contain at most 256 characters")
         if self.APP_ENV == "production" and self.COPILOT_AUTH_MODE != "trusted_proxy":
             raise ValueError("Production Copilot requires COPILOT_AUTH_MODE=trusted_proxy")
-        if self.APP_ENV == "production" and self.TTS_STORAGE_MODE == "private" and self.COPILOT_AUTH_MODE != "trusted_proxy":
-            raise ValueError("Private TTS storage requires trusted proxy identity in production")
         if self.APP_ENV == "production" and not self.REDIS_URL:
             raise ValueError("Production Copilot requires REDIS_URL for distributed quotas")
         if self.APP_ENV == "production":

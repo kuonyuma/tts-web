@@ -1,5 +1,5 @@
 from app.services.llm.providers import complete_openai_compatible
-from app.services.llm.registry import catalog, resolve_model
+from app.services.llm.registry import catalog as get_catalog, resolve_model
 from app.services.llm.types import LLMResult
 
 
@@ -13,7 +13,3 @@ async def complete(
         raise ValueError("所选模型不支持该思考模式。") from exc
     result = await complete_openai_compatible(profile, mode, messages)
     return result, profile.id, mode.id, profile.profile_revision
-
-
-def get_catalog() -> list[dict]:
-    return catalog()

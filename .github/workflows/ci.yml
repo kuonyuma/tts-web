@@ -58,6 +58,7 @@ jobs:
       - name: Check conversation storage and offline browser flows
         run: |
           node scripts/test_conversations.cjs
+          node scripts/test_browser_helper.cjs
           node scripts/test_frontend.cjs
           node scripts/test_theme_and_sidebar.cjs
           node scripts/test_async_state.cjs

@@ -18,8 +18,8 @@ TEST_CLIENT = "test-explain-client"
 
 def test_same_text_message_scopes_keep_followups_separate():
     payload = {"text": "同じ文です。", "lang": "zh", "context_id": "conversation-a_message-1"}
-    with patch("app.api.explain.generate_explanation_text", AsyncMock(return_value="explained")), patch(
-        "app.api.explain.generate_chat_answer", AsyncMock(return_value="answer")
+    with patch("app.api.explain.generate_explanation_text", AsyncMock(return_value=generated("explained"))), patch(
+        "app.api.explain.generate_chat_answer", AsyncMock(return_value=generated("answer"))
     ):
         first = client.post("/api/explain", json=payload)
         assert first.status_code == 200
@@ -39,7 +39,7 @@ def test_same_text_message_scopes_keep_followups_separate():
 
 @pytest.mark.parametrize("scope", ["", "x" * 129, "invalid/scope", "中文"])
 def test_explanation_context_id_validation(scope):
-    with patch("app.api.explain.generate_explanation_text", AsyncMock(return_value="unused")):
+    with patch("app.api.explain.generate_explanation_text", AsyncMock(return_value=generated("unused"))):
         assert client.post("/api/explain", json={"text": "Hi", "context_id": scope}).status_code == 422
     assert client.get("/api/explain", params={"text": "Hi", "context_id": scope}).status_code == 422
 

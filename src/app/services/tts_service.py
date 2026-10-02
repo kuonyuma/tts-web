@@ -1,7 +1,3 @@
-import io
-import wave
-import logging
-
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
@@ -18,8 +14,6 @@ from app.services.engines import (
     TTSUpstreamError,
 )
 from app.services.engines.base import SentenceCue, TimedSynthesisResult
-
-logger = logging.getLogger(__name__)
 
 
 class TTSService:
@@ -87,25 +81,6 @@ def get_tts_service() -> TTSService:
     return TTSService(get_tts_storage())
 
 
-def pcm_to_wav(
-    pcm_data: bytes,
-    sample_rate: int = 24000,
-    channels: int = 1,
-    sample_width: int = 2
-) -> bytes:
-    """
-    Encapsulates raw PCM audio data into a standard WAV container.
-    Default: 24kHz, 16-bit (2 bytes), mono (1 channel).
-    """
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(sample_width)
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm_data)
-    return buf.getvalue()
-
-
 async def synthesize(
     text: str,
     voice: str | None = None,
@@ -151,7 +126,6 @@ __all__ = [
     "get_tts_service",
     "synthesize",
     "synthesize_with_timeline",
-    "pcm_to_wav",
     "SentenceCue",
     "TimedSynthesisResult",
     "TTSException",

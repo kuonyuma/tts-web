@@ -23,10 +23,6 @@ _initialized = False
 _init_lock = threading.Lock()
 
 
-def _normalize_client_id(client_id: str | None) -> str:
-    return normalize_client_id(client_id)
-
-
 @contextmanager
 def _get_conn():
     """Use the existing SQLite store and migrate legacy explanation rows in place."""
@@ -250,7 +246,7 @@ def _parse_messages(raw: str) -> list[dict]:
 
 
 def get_explanation(client_id: str, explain_key: str) -> dict | None:
-    cid = _normalize_client_id(client_id)
+    cid = normalize_client_id(client_id)
     with _get_conn() as conn:
         row = conn.execute(
             "select text, lang, explain_key, explanation, messages, model_id, provider, "
@@ -268,7 +264,7 @@ def get_explanation(client_id: str, explain_key: str) -> dict | None:
 def reserve_storage_slot(
     client_id: str, explain_key: str, ttl_seconds: float = 210.0
 ) -> str:
-    cid = _normalize_client_id(client_id)
+    cid = normalize_client_id(client_id)
     with _get_conn() as conn:
         conn.execute("begin immediate")
         now = time.time()
@@ -334,7 +330,7 @@ def save_explanation(
     reservation_token: str | None = None,
     max_retries: int = 5,
 ) -> None:
-    cid = _normalize_client_id(client_id)
+    cid = normalize_client_id(client_id)
     usage_values = [max(0, int((usage or {}).get(name, 0))) for name in (
         "prompt_tokens", "completion_tokens", "reasoning_tokens", "total_tokens"
     )]
@@ -395,7 +391,7 @@ def append_chat_messages(
     client_id: str, explain_key: str, user_message: str, answer: str,
     *, model_id: str | None = None, mode_id: str | None = None,
 ) -> list[dict] | None:
-    cid = _normalize_client_id(client_id)
+    cid = normalize_client_id(client_id)
     with _get_conn() as conn:
         conn.execute("begin immediate")
         row = conn.execute(
@@ -431,7 +427,7 @@ def record_usage(
     usage: dict[str, int],
 ) -> None:
     """Store aggregate billing metadata only; prompts and reasoning are never recorded."""
-    cid = _normalize_client_id(client_id)
+    cid = normalize_client_id(client_id)
     values = [max(0, int(usage.get(name, 0))) for name in (
         "prompt_tokens", "completion_tokens", "reasoning_tokens", "total_tokens"
     )]

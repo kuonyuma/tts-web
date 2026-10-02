@@ -1,5 +1,3 @@
-import io
-import wave
 import pytest
 from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
@@ -9,7 +7,6 @@ from app.services.tts_service import (
     TTSTimeoutError,
     TTSUpstreamError,
     TTSConfigError,
-    pcm_to_wav,
 )
 
 client = TestClient(app, headers={"X-Client-ID": "test-client"})
@@ -89,20 +86,6 @@ def test_tts_over_max_length():
     long_text = "あ" * 1001
     response = client.post("/api/tts", json={"text": long_text})
     assert response.status_code == 422
-
-
-def test_pcm_to_wav():
-    """Verify raw PCM bytes are properly converted to valid WAV header container"""
-    dummy_pcm = b"\x00\x00" * 2400  # 0.1s of silence
-    wav_bytes = pcm_to_wav(dummy_pcm, sample_rate=24000, channels=1, sample_width=2)
-    assert wav_bytes.startswith(b"RIFF")
-    assert b"WAVE" in wav_bytes
-
-    with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
-        assert wf.getnchannels() == 1
-        assert wf.getsampwidth() == 2
-        assert wf.getframerate() == 24000
-        assert wf.getnframes() == 2400
 
 
 @patch("app.services.history_service.add_or_touch")

@@ -2,7 +2,7 @@ import pytest
 from app.services.errors import TTSUpstreamError
 from unittest.mock import patch, MagicMock
 from app.services.engines.edge_engine import EdgeTTSEngine
-from app.services.engines.base import SentenceCue, TimedSynthesisResult
+from app.services.engines.base import TimedSynthesisResult
 
 
 @pytest.mark.anyio

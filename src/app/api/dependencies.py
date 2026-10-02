@@ -27,11 +27,16 @@ async def require_tts_identity(
     return trusted_identity(x_authenticated_user, x_auth_proxy_secret)
 
 
-def trusted_identity(user: str | None, secret: str | None) -> str:
+def trusted_identity(
+    user: str | None,
+    secret: str | None,
+    *,
+    missing_auth_detail: str = "需要登录后才能访问个人数据。",
+) -> str:
     supplied = (secret or "").encode()
     expected = settings.AUTH_PROXY_SECRET.encode()
     if len(expected) < 32 or not supplied or not hmac.compare_digest(supplied, expected):
-        raise HTTPException(401, "需要登录后才能访问个人数据。")
+        raise HTTPException(401, missing_auth_detail)
     identity = (user or "").strip()
     if not identity or any(ord(char) < 32 or ord(char) == 127 for char in identity):
         raise HTTPException(401, "身份信息无效。")
@@ -53,19 +58,12 @@ async def require_copilot_identity(
     them only on the private hop to this application.
     """
     if settings.COPILOT_AUTH_MODE == "development":
-        try:
-            return normalize_client_id(x_client_id)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from None
-
-    supplied = (x_auth_proxy_secret or "").encode()
-    expected = settings.AUTH_PROXY_SECRET.encode()
-    if not supplied or not hmac.compare_digest(supplied, expected):
-        raise HTTPException(401, "需要登录后才能使用 AI 讲解。")
-    identity = (x_authenticated_user or "").strip()
-    if not identity or any(ord(char) < 32 or ord(char) == 127 for char in identity):
-        raise HTTPException(401, "身份信息无效。")
-    return hashlib.sha256(f"copilot:{identity}".encode("utf-8")).hexdigest()
+        return await require_client_id(x_client_id)
+    return trusted_identity(
+        x_authenticated_user,
+        x_auth_proxy_secret,
+        missing_auth_detail="需要登录后才能使用 AI 讲解。",
+    )
 
 
 async def gemini_request_key(

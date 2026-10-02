@@ -51,8 +51,6 @@ let keyTestResult = null;
 let themeOptionsGrid = null;
 
 let callbacks = {
-  onEngineChange: () => {},
-  onVoiceChange: () => {},
   onLimitsLoaded: () => {},
 };
 
@@ -74,20 +72,6 @@ export function getSelectedEngine() {
 
 export function getSelectedVoice() {
   return voiceSelect ? voiceSelect.value : null;
-}
-
-export function setSelectedEngine(engineId) {
-  if (engineSelect) {
-    engineSelect.value = engineId;
-    renderVoicesForCurrentEngine();
-    updateEngineMeta();
-  }
-}
-
-export function setSelectedVoice(voiceId) {
-  if (voiceSelect) {
-    voiceSelect.value = voiceId;
-  }
 }
 
 export function getMaxCharCount() {
@@ -153,10 +137,6 @@ export async function loadEngines() {
     const res = await apiFetch("/api/engines");
     if (!res.ok) throw new Error("Failed to load engines list");
     availableEngines = await res.json();
-    const retention = document.getElementById("historyRetention");
-    if (retention && availableEngines[0]?.storage_mode === "private") {
-      retention.textContent = "个人音频无固定有效期；达到容量水位时按最近播放时间清理。删除历史会同时删除音频。";
-    }
     const limits = availableEngines[0];
     if (Number.isInteger(limits?.max_text_length)) maxCharCount = limits.max_text_length;
     if (Number.isInteger(limits?.min_text_length)) minCharCount = limits.min_text_length;
@@ -285,11 +265,6 @@ export function getApiKey() {
   return localStorage.getItem("tts_gemini_api_key") || "";
 }
 
-export function hasApiKey() {
-  const key = getApiKey();
-  return Boolean(key && key.trim());
-}
-
 export function isSettingsModalOpen() {
   return Boolean(settingsModal && settingsModal.style.display !== "none");
 }
@@ -349,7 +324,6 @@ export function initSettings(userCallbacks = {}) {
     engineSelect.addEventListener("change", () => {
       localStorage.setItem("tts_selected_engine", engineSelect.value);
       renderVoicesForCurrentEngine();
-      callbacks.onEngineChange(engineSelect.value);
     });
   }
 
@@ -358,7 +332,6 @@ export function initSettings(userCallbacks = {}) {
       const currentEngineId = engineSelect?.value || "edge";
       localStorage.setItem(`tts_selected_voice_${currentEngineId}`, voiceSelect.value);
       updateEngineMeta();
-      callbacks.onVoiceChange(voiceSelect.value);
     });
   }
 
