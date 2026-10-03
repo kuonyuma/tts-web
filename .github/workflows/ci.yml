@@ -63,6 +63,7 @@ jobs:
           node scripts/test_theme_and_sidebar.cjs
           node scripts/test_async_state.cjs
           node scripts/test_chat.cjs
+          node scripts/test_accounts.cjs
 
   docker:
     name: Docker build
@@ -82,12 +83,14 @@ jobs:
             sleep 1
           done
           docker exec tts-ci /app/.venv/bin/python -c "import urllib.request; assert b'<!DOCTYPE html>' in urllib.request.urlopen('http://127.0.0.1:8000/').read()"
+          docker exec -i tts-ci /app/.venv/bin/python - create < scripts/smoke_auth.py
           docker restart tts-ci
           for attempt in $(seq 1 20); do
             if docker exec tts-ci /app/.venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then break; fi
             sleep 1
           done
           docker exec tts-ci /app/.venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+          docker exec -i tts-ci /app/.venv/bin/python - restart < scripts/smoke_auth.py
 
       - name: Container logs and cleanup
         if: always()

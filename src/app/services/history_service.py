@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from app.config import settings
 from app.services.errors import StorageFullError
+from app.services.user_migrations import migrate_users
 from app.validation import normalize_client_id
 from pathlib import Path
 from contextlib import contextmanager
@@ -79,6 +80,7 @@ def _initialize_db() -> None:
     try:
         conn.execute("pragma journal_mode=wal")
         conn.execute("begin immediate")
+        migrate_users(conn)
         cursor = conn.execute("select name from sqlite_master where type='table' and name='history'")
         table_exists = cursor.fetchone() is not None
 

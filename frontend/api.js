@@ -5,8 +5,17 @@
 
 let requestTimeoutMs = 45000;
 let copilotRequestTimeoutMs = 195000;
+let accountScope = null;
+
+export function setAccountScope(scope) { accountScope = scope; }
+
+export function getCsrfToken() {
+  if (typeof document === 'undefined') return '';
+  return document.cookie.split('; ').find(value => value.startsWith('tts_csrf='))?.slice(9) || '';
+}
 
 export function getClientId() {
+  if (accountScope) return accountScope;
   let clientId = localStorage.getItem("tts_client_id");
   if (!clientId || clientId === "default" || !/^[A-Za-z0-9_-]{1,128}$/.test(clientId)) {
     clientId = (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
@@ -64,7 +73,13 @@ export async function apiFetch(url, options = {}, timeoutOverride = null) {
   const timer = setTimeout(() => controller.abort(), timeout);
   let reader;
   try {
-    const response = await fetch(target.href, { ...options, signal: controller.signal });
+    const headers = new Headers(options.headers);
+    if (!['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase())) {
+      const csrf = getCsrfToken();
+      if (csrf) headers.set('X-CSRF-Token', csrf);
+    }
+    const response = await fetch(target.href, { ...options, headers, credentials: 'same-origin', signal: controller.signal });
+    if (response.status === 401 && accountScope) window.dispatchEvent(new Event('account-expired'));
     // Keep deadline active while receiving response body
     const chunks = [];
     let size = 0;

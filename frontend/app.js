@@ -8,6 +8,7 @@ import { initCopilot, loadCopilotModels, resetExplanation, setCurrentExplainText
 import { ConversationStore } from './conversations.js';
 import { MessagePlayer } from './message-player.js';
 import { initSidebarResizers, adjustForAvailableSpace } from './sidebar-resizer.js';
+import { bootstrapAccount, ACCOUNT_SCOPE_KEY } from './account-client.js';
 
 const $ = id => document.getElementById(id);
 const narrow = window.matchMedia('(max-width: 1100px)');
@@ -352,6 +353,8 @@ async function migrateHistory() {
 }
 async function init() {
   $('generateBtn').disabled = true;
+  window.addEventListener('account-expired', () => location.replace('/account.html#login'));
+  await bootstrapAccount();
   initSettings({ onLimitsLoaded: limits => {
     setRequestTimeoutMs((limits.requestTimeoutSeconds + 15) * 1000);
     updateCounter();
@@ -436,6 +439,7 @@ async function init() {
       else { renderConversations(); renderMessages(); bindAI(); }
     });
     if (event.key === 'tts_client_id') location.reload();
+    if (event.key === ACCOUNT_SCOPE_KEY) location.reload();
   });
 }
 init().catch(error => showError(error.message || '页面初始化失败，请刷新重试。'));

@@ -1,6 +1,7 @@
 import os
 import math
 from pathlib import Path
+from urllib.parse import urlsplit
 from dotenv import load_dotenv
 
 # Search for .env in project root, src directory, or current directory
@@ -46,6 +47,21 @@ def secret_value(name: str) -> str:
 
 class Settings:
     APP_ENV: str = os.getenv("APP_ENV", "development").strip().lower()
+    ACCOUNT_AUTH_REQUIRED: bool = env_flag("ACCOUNT_AUTH_REQUIRED")
+    AUTH_JWT_SECRET: str = secret_value("AUTH_JWT_SECRET")
+    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
+    AUTH_SESSION_SECONDS: int = positive_number("AUTH_SESSION_SECONDS", "28800")
+    AUTH_ATTEMPTS_PER_MINUTE: int = positive_number("AUTH_ATTEMPTS_PER_MINUTE", "10")
+    AUTH_VERIFY_TOKEN_SECONDS: int = positive_number("AUTH_VERIFY_TOKEN_SECONDS", "86400")
+    AUTH_RESET_TOKEN_SECONDS: int = positive_number("AUTH_RESET_TOKEN_SECONDS", "1800")
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "").strip()
+    SMTP_PORT: int = positive_number("SMTP_PORT", "587")
+    SMTP_USERNAME: str = os.getenv("SMTP_USERNAME", "").strip()
+    SMTP_PASSWORD: str = secret_value("SMTP_PASSWORD")
+    SMTP_FROM: str = os.getenv("SMTP_FROM", "").strip()
+    SMTP_SECURITY: str = os.getenv("SMTP_SECURITY", "starttls").strip().lower()
+    GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "").strip()
+    GITHUB_CLIENT_SECRET: str = secret_value("GITHUB_CLIENT_SECRET")
     COPILOT_AUTH_MODE: str = os.getenv("COPILOT_AUTH_MODE", "development").strip().lower()
     AUTH_PROXY_SECRET: str = secret_value("AUTH_PROXY_SECRET")
     REDIS_URL: str = os.getenv("REDIS_URL", "").strip()
@@ -96,7 +112,7 @@ class Settings:
     GLOBAL_REQUESTS_PER_MINUTE: int = positive_number("GLOBAL_REQUESTS_PER_MINUTE", "600")
     CACHE_MAX_BYTES: int = positive_number("CACHE_MAX_BYTES", "536870912")
     CACHE_MAX_ENTRIES: int = positive_number("CACHE_MAX_ENTRIES", "1000")
-    TTS_STORAGE_MODE: str = os.getenv("TTS_STORAGE_MODE", "legacy").strip().lower()
+    TTS_STORAGE_MODE: str = os.getenv("TTS_STORAGE_MODE", "private" if ACCOUNT_AUTH_REQUIRED else "legacy").strip().lower()
     TTS_CACHE_REVISION: str = os.getenv("TTS_CACHE_REVISION", "1").strip()
     TTS_USER_MAX_BYTES: int = positive_number("TTS_USER_MAX_BYTES", "134217728")
     TTS_USER_MAX_ENTRIES: int = positive_number("TTS_USER_MAX_ENTRIES", "250")
@@ -110,6 +126,21 @@ class Settings:
     EXPLANATION_MAX_RECORDS: int = positive_number("EXPLANATION_MAX_RECORDS", "1000")
 
     def __init__(self):
+        origin = urlsplit(self.PUBLIC_BASE_URL)
+        if (origin.scheme not in {"http", "https"} or not origin.netloc or origin.username
+                or origin.password or origin.path or origin.query or origin.fragment):
+            raise ValueError("PUBLIC_BASE_URL must be an HTTP(S) origin without credentials or path")
+        if self.AUTH_JWT_SECRET and len(self.AUTH_JWT_SECRET.encode()) < 32:
+            raise ValueError("AUTH_JWT_SECRET must contain at least 32 bytes")
+        if self.ACCOUNT_AUTH_REQUIRED and self.TTS_STORAGE_MODE != "private":
+            raise ValueError("Account authentication requires TTS_STORAGE_MODE=private")
+        if self.SMTP_SECURITY not in {"starttls", "ssl", "plain"}:
+            raise ValueError("SMTP_SECURITY must be starttls, ssl or plain")
+        if self.APP_ENV == "production" and self.ACCOUNT_AUTH_REQUIRED:
+            if not self.AUTH_JWT_SECRET or origin.scheme != "https":
+                raise ValueError("Production accounts require AUTH_JWT_SECRET and HTTPS PUBLIC_BASE_URL")
+        if self.APP_ENV == "production" and self.SMTP_HOST and self.SMTP_SECURITY == "plain":
+            raise ValueError("Production SMTP requires TLS")
         if self.TTS_STORAGE_MODE not in {"legacy", "private"}:
             raise ValueError("TTS_STORAGE_MODE must be legacy or private")
         if not self.TTS_CACHE_REVISION or len(self.TTS_CACHE_REVISION) > 64:
@@ -122,7 +153,7 @@ class Settings:
             raise ValueError("AUTH_PROXY_SECRET must contain at least 32 characters")
         if len(self.AUTH_PROXY_SECRET) > 256:
             raise ValueError("AUTH_PROXY_SECRET must contain at most 256 characters")
-        if self.APP_ENV == "production" and self.COPILOT_AUTH_MODE != "trusted_proxy":
+        if self.APP_ENV == "production" and self.COPILOT_AUTH_MODE != "trusted_proxy" and not self.ACCOUNT_AUTH_REQUIRED:
             raise ValueError("Production Copilot requires COPILOT_AUTH_MODE=trusted_proxy")
         if self.APP_ENV == "production" and not self.REDIS_URL:
             raise ValueError("Production Copilot requires REDIS_URL for distributed quotas")

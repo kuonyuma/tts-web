@@ -2,7 +2,8 @@ import hmac
 import hashlib
 from typing import Annotated
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.validation import normalize_client_id
@@ -10,7 +11,10 @@ from app.validation import normalize_client_id
 
 async def require_client_id(x_client_id: Annotated[str, Header(alias="X-Client-ID")]) -> str:
     try:
-        return normalize_client_id(x_client_id)
+        value = normalize_client_id(x_client_id)
+        if value.startswith("account_"):
+            raise HTTPException(401, "账号数据需要登录后才能访问。")
+        return value
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
 
@@ -19,7 +23,17 @@ async def require_tts_identity(
     x_client_id: Annotated[str | None, Header(alias="X-Client-ID")] = None,
     x_authenticated_user: Annotated[str | None, Header(alias="X-Authenticated-User", max_length=512)] = None,
     x_auth_proxy_secret: Annotated[str | None, Header(alias="X-Auth-Proxy-Secret", max_length=256)] = None,
+    request: Request = None,
 ) -> str:
+    from app.services import auth_service as auth
+
+    if settings.ACCOUNT_AUTH_REQUIRED or (
+        settings.TTS_STORAGE_MODE == "legacy" and request is not None and auth.has_credentials(request)
+    ):
+        if request is None:
+            raise HTTPException(401, "需要登录后才能继续。")
+        context = await run_in_threadpool(auth.authenticate, request)
+        return auth.account_owner(context.user)
     if settings.TTS_STORAGE_MODE == "legacy":
         return await require_client_id(x_client_id)
     # Private mode never falls back to a browser-supplied client identifier,
@@ -51,12 +65,22 @@ async def require_copilot_identity(
     x_auth_proxy_secret: Annotated[
         str | None, Header(alias="X-Auth-Proxy-Secret", max_length=256)
     ] = None,
+    request: Request = None,
 ) -> str:
     """Resolve Copilot ownership without trusting a public browser in production.
 
     The edge proxy must strip both identity headers from incoming traffic and inject
     them only on the private hop to this application.
     """
+    from app.services import auth_service as auth
+
+    if settings.ACCOUNT_AUTH_REQUIRED or (
+        settings.COPILOT_AUTH_MODE == "development" and request is not None and auth.has_credentials(request)
+    ):
+        if request is None:
+            raise HTTPException(401, "需要登录后才能继续。")
+        context = await run_in_threadpool(auth.authenticate, request)
+        return auth.account_owner(context.user)
     if settings.COPILOT_AUTH_MODE == "development":
         return await require_client_id(x_client_id)
     return trusted_identity(
