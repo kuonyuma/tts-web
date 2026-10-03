@@ -82,6 +82,7 @@ let browser;
     console.log('PASS settings remain accessible with both sidebars collapsed; light/dark theme controls');
     for(const theme of ['default','sakura']) {
       await evaluate(`localStorage.setItem('tts_theme','${theme}')`);
+      await evaluate("document.body.dataset.ready='reloading'");
       await send('Page.reload');
       await wait("document.body?.dataset.ready==='true' && document.documentElement.dataset.theme==='light'");
       assert.equal(await evaluate("localStorage.getItem('tts_theme')"),'light');

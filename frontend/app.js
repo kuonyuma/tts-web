@@ -9,6 +9,7 @@ import { ConversationStore } from './conversations.js';
 import { MessagePlayer } from './message-player.js';
 import { initSidebarResizers, adjustForAvailableSpace } from './sidebar-resizer.js';
 import { bootstrapAccount, ACCOUNT_SCOPE_KEY } from './account-client.js';
+import { initWorkbench } from './workbench.js';
 
 const $ = id => document.getElementById(id);
 const narrow = window.matchMedia('(max-width: 1100px)');
@@ -18,6 +19,7 @@ let aiTargetId = null;
 let activeStorageKey;
 let ready = false;
 let provisionalId = null;
+let workbench;
 const cards = new Map();
 const pending = new Set();
 const drafts = new Map();
@@ -354,12 +356,27 @@ async function migrateHistory() {
 async function init() {
   $('generateBtn').disabled = true;
   window.addEventListener('account-expired', () => location.replace('/account.html#login'));
-  await bootstrapAccount();
+  const account = await bootstrapAccount();
   initSettings({ onLimitsLoaded: limits => {
     setRequestTimeoutMs((limits.requestTimeoutSeconds + 15) * 1000);
     updateCounter();
   } });
   initCopilot();
+  workbench = await initWorkbench({ account, showPanel: () => {
+    rightOpen = true;
+    if (narrow.matches) leftOpen = false;
+    else localStorage.setItem('tts_chat_right_open', '1');
+    syncPanels();
+  }, fillInput: text => {
+    if ($('textInput').value && !confirm('中间输入框已有未发送内容。用选中的文字覆盖它？')) return;
+    $('textInput').value = text;
+    updateCounter();
+    const length = Array.from(text.trim()).length;
+    if (length < getMinCharCount() || length > getMaxCharCount()) showError(`请输入 ${getMinCharCount()} 至 ${getMaxCharCount()} 字。`);
+    else hideError();
+    if (narrow.matches) { rightOpen = false; syncPanels(); }
+    $('textInput').focus();
+  } });
   initSidebarResizers({
     isLeftOpen: () => leftOpen,
     isRightOpen: () => rightOpen,
@@ -395,7 +412,7 @@ async function init() {
   $('historyBtn').addEventListener('click', () => togglePanel('left'));
   $('sidebarCloseBtn').addEventListener('click', () => togglePanel('left'));
   $('aiPanelBtn').addEventListener('click', () => togglePanel('right'));
-  $('aiCloseBtn').addEventListener('click', () => togglePanel('right'));
+  $('aiCloseBtn').addEventListener('click', () => { workbench.flush(); togglePanel('right'); });
   $('sidebarBackdrop').addEventListener('click', () => { leftOpen = false; rightOpen = false; syncPanels(); });
   $('errorCloseBtn').addEventListener('click', hideError);
   $('migrationRetryBtn').addEventListener('click', migrateHistory);
@@ -439,7 +456,7 @@ async function init() {
       else { renderConversations(); renderMessages(); bindAI(); }
     });
     if (event.key === 'tts_client_id') location.reload();
-    if (event.key === ACCOUNT_SCOPE_KEY) location.reload();
+    if (event.key === ACCOUNT_SCOPE_KEY) { workbench.dispose(); resetExplanation(); location.reload(); }
   });
 }
 init().catch(error => showError(error.message || '页面初始化失败，请刷新重试。'));
