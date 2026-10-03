@@ -20,6 +20,14 @@ AI Reading Copilot is a separate, server-funded multi-model feature. Its browser
 model-specific reasoning selectors are driven by a backend allowlist; browser-supplied LLM keys are
 never accepted. See [COPILOT_DEPLOYMENT.md](docs/deployment/COPILOT_DEPLOYMENT.md) before enabling it publicly.
 
+Open `/account.html` to register, log in, verify an email, reset a password or manage
+an account. Authentication uses Argon2id passwords, JWT-backed revocable sessions,
+HttpOnly cookies and CSRF protection. GitHub OAuth and SMTP email are configurable.
+Ordinary users and administrators have separate server-enforced permissions.
+Local mode remains available; enable `ACCOUNT_AUTH_REQUIRED=true` with private TTS
+storage for account-only access. See [Authentication setup](docs/development/AUTHENTICATION.md)
+for configuration, admin bootstrap, API and data ownership.
+
 ---
 
 ## ✨ Key Features

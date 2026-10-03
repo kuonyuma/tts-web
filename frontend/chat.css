@@ -523,3 +523,4 @@
   transition: none !important;
 }
 
+.account-button { text-decoration: none; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

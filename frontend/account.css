@@ -1,0 +1,36 @@
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; color: var(--text-primary); background: var(--bg-subtle); font-family: var(--font-sans); }
+.account-shell { width: min(100% - 32px, 500px); margin: 48px auto; }
+.account-brand { display: inline-flex; gap: 12px; align-items: center; font-size: 30px; text-decoration: none; color: var(--text-primary); font-weight: 600; }
+.account-brand span { font-size: 19px; letter-spacing: 3px; }
+header { margin: 30px 0 24px; }
+h1 { font-size: 28px; letter-spacing: -1px; margin: 8px 0; }
+h2 { font-size: 20px; margin-top: 0; overflow-wrap: anywhere; }
+p, small, footer { color: var(--text-secondary); line-height: 1.6; }
+.account-eyebrow { font-size: 12px; letter-spacing: 2px; }
+.account-card { padding: 28px; margin: 18px 0; border: 1px solid var(--border); border-radius: 20px; background: var(--bg-card); box-shadow: var(--shadow-card); }
+.account-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 20px; }
+button, .account-primary, .account-secondary { border: 1px solid var(--border); border-radius: 10px; padding: 11px 16px; background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 14px; cursor: pointer; text-decoration: none; text-align: center; }
+button:hover, .account-secondary:hover { background: var(--bg-subtle-hover); }
+button:disabled { opacity: .5; cursor: wait; }
+.account-tabs button { flex: 1; padding: 8px 4px; border: 0; }
+.account-tabs button[aria-pressed="true"] { background: var(--primary-subtle); font-weight: 600; }
+.account-form { display: grid; gap: 10px; }
+.account-form label { font-size: 14px; margin-top: 8px; }
+.account-form input { width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-primary); background: var(--bg-page); font: inherit; }
+input:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 3px; }
+.account-form button { margin-top: 10px; }
+.account-primary { background: var(--primary); color: var(--bg-page); border-color: var(--primary); }
+.account-primary:hover { background: var(--primary-hover); }
+.account-secondary { display: block; margin-top: 20px; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+.account-note, .account-notice { padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); overflow-wrap: anywhere; }
+.account-notice[data-error="true"] { border-color: #be6767; }
+details { margin-top: 24px; } summary { cursor: pointer; }
+#accountEmail { overflow-wrap: anywhere; }
+.admin-user { display: grid; gap: 10px; border-bottom: 1px solid var(--border); padding: 16px 0; overflow-wrap: anywhere; }
+.admin-user select { font: inherit; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; }
+footer { display: grid; gap: 14px; text-align: center; font-size: 12px; margin-top: 30px; }
+footer a { color: var(--text-primary); }
+@media (max-width: 480px) { .account-shell { margin-top: 26px; } .account-card { padding: 20px; } h1 { font-size: 25px; } }

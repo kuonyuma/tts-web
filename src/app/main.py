@@ -14,6 +14,9 @@ from starlette.responses import JSONResponse
 from app.api.tts import router as tts_router
 from app.api.explain import router as explain_router
 from app.api.history import router as history_router
+from app.api.users import router as users_router
+from app.api.auth import router as auth_router
+from app.services.auth_service import AuthError, SESSION_COOKIE, CSRF_COOKIE
 from app.services.history_service import init_db
 from app.config import settings
 from app.api.limits import RequestLimits
@@ -137,6 +140,19 @@ app.add_exception_handler(OSError, storage_failure)
 app.add_exception_handler(StorageFullError, storage_failure)
 
 
+@app.exception_handler(AuthError)
+async def auth_failure(request, exc):
+    headers = {"Retry-After": "60"} if exc.status_code == 429 else None
+    response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=headers)
+    # Let expired/revoked browser sessions return to the optional local mode.
+    # Wrong passwords and invalid Bearer tokens must not clear a valid cookie.
+    if (exc.status_code == 401 and request.url.path in {"/api/auth/me", "/api/auth/logout"}
+            and not request.headers.get("authorization")):
+        response.delete_cookie(SESSION_COOKIE, path="/")
+        response.delete_cookie(CSRF_COOKIE, path="/")
+    return response
+
+
 @app.exception_handler(Exception)
 async def unexpected_failure(request, exc):
     # Log code locations, not exception strings that may contain upstream secrets.
@@ -161,6 +177,8 @@ async def readiness_check():
 app.include_router(tts_router)
 app.include_router(explain_router)
 app.include_router(history_router)
+app.include_router(users_router)
+app.include_router(auth_router)
 
 # Mount frontend static files
 class FrontendFiles(StaticFiles):

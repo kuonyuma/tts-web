@@ -31,17 +31,24 @@ In this mode only, the existing `X-Client-ID` identifies local sessions and Redi
 Production startup fails unless all of these conditions are met:
 
 - `APP_ENV=production`
-- `COPILOT_AUTH_MODE=trusted_proxy`
-- `AUTH_PROXY_SECRET` contains at least 32 random characters
+- either the existing `COPILOT_AUTH_MODE=trusted_proxy` contract below, or
+  `ACCOUNT_AUTH_REQUIRED=true` with the HTTPS/JWT/private-storage configuration in
+  [Authentication setup](../development/AUTHENTICATION.md)
+- `AUTH_PROXY_SECRET` contains at least 32 random characters when trusted proxy mode is enabled
 - `REDIS_URL` is configured
 - every configured cross-origin origin uses HTTPS and no wildcard is present
 
-The public TLS/WAF/reverse proxy must authenticate the user, remove any inbound
+In trusted proxy mode, the public TLS/WAF/reverse proxy must authenticate the user, remove any inbound
 `X-Authenticated-User` and `X-Auth-Proxy-Secret` headers, and inject both headers on the private
 upstream request. The application port must remain private; the supplied Compose mapping binds it
 to `127.0.0.1`. Rotate the proxy secret and model credentials through the deployment secret manager.
 Prefer `DEEPSEEK_API_KEY_FILE`, `ZHIPU_API_KEY_FILE`, `QWEN_API_KEY_FILE`, and
 `AUTH_PROXY_SECRET_FILE` over plaintext environment values.
+
+Account mode instead resolves the verified local account from its JWT-backed session and uses
+`account_<id>` for ownership and quotas. Without `ACCOUNT_AUTH_REQUIRED=true`, local account
+cookies do not replace the trusted proxy contract. Both modes still require HTTPS at the public
+edge, a private application port and production Redis quotas.
 
 Redis atomically reserves weighted quotas after cache lookup and before each billable model call:
 per-user/minute, per-user/day, and global/day. Provider failures do not refund admission units.
@@ -77,8 +84,8 @@ fixtures without committing provider responses that contain user data.
 ## Remaining infrastructure work before public launch
 
 This repository now has application-level controls, but a serious public launch still needs the
-external infrastructure that code cannot provision by itself: a selected identity provider and
-edge auth configuration, managed Redis, managed database/backups, WAF/bot controls, centralized
+external infrastructure that code cannot provision by itself: SMTP/GitHub configuration for local
+accounts or an identity provider and edge auth for proxy mode, managed Redis, database/backups, WAF/bot controls, centralized
 redacted logs/alerts, provider billing alerts and hard caps, secret rotation, vulnerability scanning,
 load tests, abuse tests, and a rollback drill. SQLite remains suitable for local/single-instance use;
 migrate Copilot records and the aggregate ledger to PostgreSQL before horizontal scaling.
