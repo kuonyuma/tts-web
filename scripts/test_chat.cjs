@@ -111,6 +111,7 @@ let browser;
     // The assertion above consumes the deferred. Keep this attempt pending to test recovery on refresh.
     console.log('PASS consecutive sends, reverse completion order, background ownership and per-card retry');
 
+    await evaluate("document.body.dataset.ready='reloading'");
     await send('Page.reload');
     await wait("document.body?.dataset.ready === 'true'");
     await install();
@@ -219,6 +220,7 @@ let browser;
     assert.equal(await evaluate("document.activeElement.id"), 'aiPanelBtn');
     console.log('PASS desktop expansion, dark theme, narrow drawers and no horizontal overflow; screenshots saved');
     stallCatalog=true;
+    await evaluate("document.body.dataset.ready='reloading'");
     await send('Page.reload');
     await wait("document.body?.dataset.ready==='true'");
     assert.equal(await evaluate("document.querySelectorAll('.user-message').length"),2);

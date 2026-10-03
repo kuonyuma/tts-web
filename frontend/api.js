@@ -69,6 +69,9 @@ export async function apiFetch(url, options = {}, timeoutOverride = null) {
   const target = new URL(url, window.location.href);
   if (target.origin !== window.location.origin) throw new Error("响应地址无效。");
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (options.signal?.aborted) abort();
+  options.signal?.addEventListener('abort', abort, { once: true });
   const timeout = timeoutOverride || requestTimeoutMs;
   const timer = setTimeout(() => controller.abort(), timeout);
   let reader;
@@ -106,6 +109,7 @@ export async function apiFetch(url, options = {}, timeoutOverride = null) {
     throw error;
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener('abort', abort);
     reader?.releaseLock();
   }
 }

@@ -77,6 +77,8 @@ class RequestLimits:
         started = time.monotonic()
         try:
             headers = dict(scope.get("headers", []))
+            article_path = scope["path"] == "/api/articles" or scope["path"].startswith("/api/articles/")
+            body_limit = 4 * 1024 * 1024 if article_path else settings.MAX_REQUEST_BODY_BYTES
             if headers.get(b"content-encoding", b"identity").lower() != b"identity":
                 return await reject(415, "不支持压缩请求体。")
             declared = headers.get(b"content-length")
@@ -87,7 +89,7 @@ class RequestLimits:
                     return await reject(400, "Content-Length 无效。")
                 if length < 0:
                     return await reject(400, "Content-Length 无效。")
-                if length > settings.MAX_REQUEST_BODY_BYTES:
+                if length > body_limit:
                     return await reject(413, "请求体超过大小限制。")
             chunks = []
             size = 0
@@ -99,7 +101,7 @@ class RequestLimits:
                             return
                         data = message.get("body", b"")
                         size += len(data)
-                        if size > settings.MAX_REQUEST_BODY_BYTES:
+                        if size > body_limit:
                             return await reject(413, "请求体超过大小限制。")
                         chunks.append(data)
                         if not message.get("more_body", False):

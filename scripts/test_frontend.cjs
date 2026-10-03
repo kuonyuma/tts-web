@@ -123,6 +123,7 @@ let browser;
     await wait("document.querySelectorAll('.user-message').length===4");
     console.log('PASS configured limits count Unicode code points');
     mode='success'; audioUnavailable=true;
+    await evaluate("document.body.dataset.ready='reloading'");
     await send('Page.reload'); await wait("document.body?.dataset.ready==='true'");
     await evaluate("document.querySelector('.audio-action:not([hidden])').click()");
     await wait("document.querySelector('.retry-audio')?.textContent.includes('重新生成')");

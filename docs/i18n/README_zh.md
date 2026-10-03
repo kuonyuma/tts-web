@@ -20,6 +20,7 @@
 
 ## ✨ 核心特性
 
+- **账号文章库与多标签工作台**：长文章保存到登录账号，支持自动保存、独立草稿保护、UTF-8 `.txt` / `.md` 导入和选文填入语音输入。原 AI 助手作为工作台标签，继续只解释已提交的会话文本。详见[文章库使用说明](../development/ARTICLES.md)。
 - 🎙️ **多模型 & 多语种发音人支持**：
   - **Edge TTS（默认・完全免费）**：无需任何 API Key，即开即用。内置微软高质量神经网络音色（日语：七海 Nanami / 圭太 Keita；中文：晓晓 Xiaoxiao / 云希 Yunxi；英语：Ava / Andrew 等）。
   - **Gemini TTS（高拟真・BYOK）**：基于 Google Gemini 2.5 Flash（`gemini-2.5-flash-preview-tts`），提供 8 种高表现力发音人（`Kore`、`Aoede`、`Leda`、`Zephyr`、`Puck`、`Charon`、`Fenrir`、`Orus`）。

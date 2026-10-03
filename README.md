@@ -32,6 +32,7 @@ for configuration, admin bootstrap, API and data ownership.
 
 ## ✨ Key Features
 
+- **Account article library and tabbed reading workspace**: Save long plain-text articles to your login account, edit with automatic saving and protected local drafts, import UTF-8 `.txt`/`.md` files, and fill selected passages into the TTS composer. The existing AI assistant occupies one workspace tab and continues to follow submitted conversation text. See [Article library guide](docs/development/ARTICLES.md).
 - 🎙️ **Dual-Engine & Multi-Voice Support**:
   - **Edge TTS (Default & Free)**: Zero configuration, no API key required. Built-in neural voices (Japanese: Nanami / Keita; Chinese: Xiaoxiao / Yunxi; English: Ava / Andrew).
   - **Gemini TTS (High Fidelity & BYOK)**: Powered by Google Gemini 2.5 Flash (`gemini-2.5-flash-preview-tts`), offering 8 expressive natural voices (`Kore`, `Aoede`, `Leda`, `Zephyr`, `Puck`, `Charon`, `Fenrir`, `Orus`).
