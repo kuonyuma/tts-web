@@ -47,6 +47,7 @@ env.bak/
 venv.bak/
 .pdm-build/
 __pypackages__/
+node_modules/
 
 # ==========================================
 # Testing, Coverage & Quality Tools

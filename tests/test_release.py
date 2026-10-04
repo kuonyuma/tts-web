@@ -1,3 +1,4 @@
+from app.services import database as database_service
 import asyncio
 import base64
 import errno
@@ -48,7 +49,7 @@ def test_engine_and_voice_are_validated_before_provider(payload):
 def test_cache_cannot_escape_audio_directory(key, isolated_storage):
     sentinel = isolated_storage / "sentinel.mp3"
     sentinel.write_bytes(b"private-sentinel")
-    for operation in (cache.get_cached_audio, cache.get_cached_flow, cache.delete_audio_cache):
+    for operation in (cache.get_cached_audio, cache.get_cached_flow):
         with pytest.raises(ValueError):
             operation(key)
     response = client.get("/api/tts/..%5Csentinel")
@@ -81,7 +82,7 @@ def test_server_key_requires_separate_authorization(monkeypatch):
     assert client.post("/api/tts", json=payload).status_code == 400
     assert client.post("/api/tts", json=payload, headers={"X-Server-Key-Token": "wrong"}).status_code == 403
     fake = AsyncMock(return_value=b"audio")
-    with patch("app.services.tts_service.synthesize", fake):
+    with patch("app.services.engines.gemini_engine.GeminiTTSEngine.synthesize", fake):
         response = client.post("/api/tts", json=payload, headers={"X-Server-Key-Token": "a" * 32})
     assert response.status_code == 200
     assert fake.call_args.kwargs["api_key"] == "private-server-key"
@@ -137,7 +138,7 @@ async def test_chunked_and_slow_request_bodies_are_bounded(monkeypatch):
 async def test_same_key_concurrency_uses_one_synthesis_and_one_audio():
     calls = 0
 
-    async def synthesize(**kwargs):
+    async def synthesize(self, **kwargs):
         nonlocal calls
         calls += 1
         number = calls
@@ -145,7 +146,7 @@ async def test_same_key_concurrency_uses_one_synthesis_and_one_audio():
         return TimedSynthesisResult(f"audio-{number}".encode(), [SentenceCue(f"sentence-{number}", 0, 100)])
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers=HEADERS) as http:
-        with patch("app.services.tts_service.synthesize_with_timeline", synthesize):
+        with patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize_with_timeline", synthesize):
             results = await asyncio.gather(*[http.post("/api/tts/flow", json={"text": "duplicate"}) for _ in range(8)])
         assert [r.status_code for r in results] == [200] * 8
         manifests = [r.json() for r in results]
@@ -161,7 +162,7 @@ async def test_same_key_concurrency_uses_one_synthesis_and_one_audio():
 async def test_empty_timeline_is_cached():
     fake = AsyncMock(return_value=TimedSynthesisResult(b"audio", []))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers=HEADERS) as http:
-        with patch("app.services.tts_service.synthesize_with_timeline", fake):
+        with patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize_with_timeline", fake):
             first = await http.post("/api/tts/flow", json={"text": "no timeline"})
             second = await http.post("/api/tts/flow", json={"text": "no timeline"})
         assert first.status_code == second.status_code == 200
@@ -201,21 +202,21 @@ async def test_deadline_cancels_provider_and_frees_key(monkeypatch):
     monkeypatch.setattr(settings, "TTS_TIMEOUT_SECONDS", 0.03)
     cancelled = asyncio.Event()
 
-    async def stalled(**kwargs):
+    async def stalled(self, **kwargs):
         try:
             await asyncio.sleep(10)
         finally:
             cancelled.set()
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers=HEADERS) as http:
-        with patch("app.services.tts_service.synthesize", stalled):
+        with patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize", stalled):
             start = time.monotonic()
             response = await http.post("/api/tts", json={"text": "timeout"})
         assert response.status_code == 502 and "超时" in response.json()["detail"]
         assert time.monotonic() - start < 0.5
         assert cancelled.is_set() and not runtime._state().locks
         monkeypatch.setattr(settings, "TTS_TIMEOUT_SECONDS", 5.0)
-        with patch("app.services.tts_service.synthesize", AsyncMock(return_value=b"audio")):
+        with patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize", AsyncMock(return_value=b"audio")):
             assert (await http.post("/api/tts", json={"text": "timeout"})).status_code == 200
 
 
@@ -235,13 +236,13 @@ async def test_provider_queue_is_bounded_and_cancellation_recovers(monkeypatch):
 
 @pytest.mark.anyio
 async def test_database_lock_does_not_block_health_and_recovers(monkeypatch):
-    history.init_db()
-    lock = history.connect_database()
+    database_service.init_db()
+    lock = database_service.connect_database()
     lock.execute("begin immediate")
     monkeypatch.setattr(settings, "DB_BUSY_TIMEOUT_SECONDS", 0.25)
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers=HEADERS) as http:
-            with patch("app.services.tts_service.synthesize", AsyncMock(return_value=b"audio")):
+            with patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize", AsyncMock(return_value=b"audio")):
                 pending = asyncio.create_task(http.post("/api/tts", json={"text": "locked db"}))
                 await asyncio.sleep(0.05)
                 start = time.monotonic()
@@ -335,13 +336,13 @@ def test_runtime_settings_change_validation_and_metadata(monkeypatch):
     meta = client.get("/api/engines").json()
     assert meta[0]["max_text_length"] == 3 and meta[0]["min_text_length"] == 2
     assert meta[1]["default_voice"] == "Aoede"
-    with patch("app.services.tts_service.synthesize", AsyncMock(return_value=b"audio")) as fake:
+    with patch("app.services.engines.gemini_engine.GeminiTTSEngine.synthesize", AsyncMock(return_value=b"audio")) as fake:
         assert client.post("/api/tts", json={"text": "😀😀", "engine": "gemini"}, headers={"X-Gemini-Api-Key": "byok"}).status_code == 200
     assert fake.call_args.kwargs["voice"] == "Aoede"
 
 
 def test_unexpected_failure_has_safe_json_and_request_id(caplog):
-    with patch("app.services.tts_service.synthesize", AsyncMock(side_effect=RuntimeError("secret-key-do-not-log"))):
+    with patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize", AsyncMock(side_effect=RuntimeError("secret-key-do-not-log"))):
         response = client.post("/api/tts", json={"text": "unexpected"})
     assert response.status_code == 500
     assert response.json()["detail"] == "服务器内部错误，请稍后重试。"
@@ -422,11 +423,11 @@ async def test_edge_stream_failures_are_controlled(error):
 
 
 def test_legacy_migration_preserves_records_and_default_rows_are_private():
-    with sqlite3.connect(history.DB_PATH) as conn:
+    with sqlite3.connect(database_service.DB_PATH) as conn:
         conn.execute("create table history (id integer primary key, text text, voice text, model text, cache_key text unique, created_at text, last_played_at text)")
         conn.execute("insert into history values (1,'legacy','Kore','gemini',?,'2026-01-01 00:00:00','2026-01-01 00:00:00')", (KEY,))
-    history.init_db()
-    with history.connect_database() as conn:
+    database_service.init_db()
+    with database_service.connect_database() as conn:
         row = conn.execute("select * from history").fetchone()
         assert row["id"] == 1 and row["text"] == "legacy" and row["client_id"] == "default"
         assert conn.execute("pragma integrity_check").fetchone()[0] == "ok"
@@ -436,20 +437,20 @@ def test_legacy_migration_preserves_records_and_default_rows_are_private():
 
 def test_migration_failure_rolls_back_original_table():
     # A legacy NOT NULL violation must not leave the original table dropped.
-    with sqlite3.connect(history.DB_PATH) as conn:
+    with sqlite3.connect(database_service.DB_PATH) as conn:
         conn.execute("create table history (id integer primary key, text text, voice text, model text, cache_key text, created_at text, last_played_at text)")
         conn.execute("insert into history values (1,NULL,'Kore','gemini',?,'date','date')", (KEY,))
     with pytest.raises(sqlite3.IntegrityError):
-        history.init_db()
-    with sqlite3.connect(history.DB_PATH) as conn:
+        database_service.init_db()
+    with sqlite3.connect(database_service.DB_PATH) as conn:
         assert conn.execute("select count(*) from history").fetchone()[0] == 1
         assert conn.execute("select name from sqlite_master where name='history_migration'").fetchone() is None
-    assert not history._initialized
+    assert not database_service._initialized
 
 
 def test_database_file_limit_is_transactional(monkeypatch):
-    history.init_db()
-    with history.connect_database() as conn:
+    database_service.init_db()
+    with database_service.connect_database() as conn:
         pages = conn.execute("pragma page_count").fetchone()[0]
         size = conn.execute("pragma page_size").fetchone()[0]
     monkeypatch.setattr(settings, "DB_MAX_BYTES", pages * size)
@@ -457,7 +458,7 @@ def test_database_file_limit_is_transactional(monkeypatch):
         history.add_or_touch("one", "x" * 100000, "voice", "edge", "edge", KEY)
     assert caught.value.sqlite_errorcode == sqlite3.SQLITE_FULL
     assert history.list_history("one") == []
-    with history.connect_database() as conn:
+    with database_service.connect_database() as conn:
         assert conn.execute("pragma integrity_check").fetchone()[0] == "ok"
 
 
@@ -559,7 +560,7 @@ async def test_ffmpeg_is_terminated_when_conversion_times_out(monkeypatch):
 def test_storage_quota_returns_507_and_logs_actionable_reason(monkeypatch, caplog):
     monkeypatch.setattr(settings, "HISTORY_MAX_RECORDS", 1)
     history.add_or_touch("existing", "keep", "voice", "edge", "edge", KEY)
-    with patch("app.services.tts_service.synthesize", AsyncMock(return_value=b"audio")):
+    with patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize", AsyncMock(return_value=b"audio")):
         response = client.post("/api/tts", json={"text": "new record"})
     assert response.status_code == 507
     assert response.headers["x-request-id"] in caplog.text

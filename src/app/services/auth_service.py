@@ -10,8 +10,8 @@ import jwt
 from fastapi import Request
 
 from app.config import settings
-from app.services.auth_storage import account_connection
-from app.services.history_service import utc_timestamp
+from app.services.database import connection as account_connection
+from app.services.timestamps import utc_timestamp
 from app.services.passwords import verify_password
 from app.services.user_service import User, user_from_row
 

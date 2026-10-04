@@ -1,3 +1,4 @@
+from app.services import database as database_service
 import re
 import sqlite3
 from unittest.mock import patch
@@ -7,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import app
-from app.services import history_service as db
 
 
 PASSWORD = "example-password"
@@ -57,7 +57,7 @@ def test_registration_sends_verification_and_token_is_hashed_single_use(mail, ca
     client = TestClient(app)
     assert create(client).status_code == 201
     token = token_from(mail[-1], "verify")
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         row = conn.execute("select * from auth_tokens").fetchone()
         assert row["token_hash"] != token
         assert token not in str(dict(row))
@@ -91,11 +91,11 @@ def test_expired_token_does_not_change_user(mail):
     client = TestClient(app)
     create(client)
     token = token_from(mail[-1], "verify")
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         conn.execute("update auth_tokens set expires_at=0")
         conn.commit()
     assert client.post("/api/auth/email/verify", json={"token": token}).status_code == 400
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         assert conn.execute("select email_verified from users").fetchone()[0] == 0
 
 
@@ -121,5 +121,5 @@ def test_mail_delivery_failure_does_not_echo_secrets_or_undo_registration(mail, 
     assert response.status_code == 201
     assert "private SMTP" not in caplog.text + response.text
     assert PASSWORD not in caplog.text + response.text
-    with sqlite3.connect(db.DB_PATH) as conn:
+    with sqlite3.connect(database_service.DB_PATH) as conn:
         assert conn.execute("select count(*) from users").fetchone()[0] == 1

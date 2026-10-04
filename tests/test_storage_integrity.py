@@ -1,3 +1,4 @@
+from app.services import database as database_service
 """Regressions for synthesis identity, absolute history time and failed publication."""
 
 import errno
@@ -67,7 +68,7 @@ def test_old_legacy_cache_key_remains_available_only_for_explicit_replay():
 def test_history_new_writes_are_absolute_and_old_values_use_server_local_time(mode, tmp_path):
     if mode == "legacy":
         storage = LegacyTTSStorage()
-        table, database = "history", history.DB_PATH
+        table, database = "history", database_service.DB_PATH
     else:
         storage = PrivateTTSStorage(PrivateTTSStore(tmp_path / "private.db", tmp_path / "private"))
         table, database = "tts_history_v2", storage.store.db_path
@@ -139,7 +140,7 @@ def test_legacy_history_orders_mixed_offsets_before_limiting():
     history.add_or_touch("alice", "older", "voice", "edge", "edge", "1" * 16)
     history.add_or_touch("alice", "newer", "voice", "edge", "edge", "2" * 16)
     # The later UTC instant has the previous day's wall-clock text.
-    with sqlite3.connect(history.DB_PATH) as conn:
+    with sqlite3.connect(database_service.DB_PATH) as conn:
         conn.execute("update history set last_played_at='2026-01-02T00:15:00+08:00' where text='older'")
         conn.execute("update history set last_played_at='2026-01-01T17:00:00+00:00' where text='newer'")
     assert [row["text"] for row in history.list_history("alice", limit=1)] == ["newer"]

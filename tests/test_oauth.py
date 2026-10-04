@@ -1,3 +1,4 @@
+from app.services import database as database_service
 import base64
 import hashlib
 from urllib.parse import parse_qs, urlparse
@@ -8,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import app
-from app.services import history_service as db
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def test_oauth_real_state_pkce_callback_and_repeat_login(github):
     other = TestClient(app)
     callback(other, start(other)["state"][0])
     assert other.get("/api/auth/me").json()["id"] == user["id"]
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         assert conn.execute("select count(*) from users").fetchone()[0] == 1
         assert "private-provider-token" not in str(conn.execute("select * from oauth_accounts").fetchall())
 
@@ -78,7 +78,7 @@ def test_oauth_browser_binding_state_tamper_and_expiry(github):
     assert callback(TestClient(app), state).status_code == 400
     assert callback(client, "x" * 43).status_code == 400
     assert not github["exchanges"]
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         conn.execute("update oauth_states set expires_at=0")
         conn.commit()
     assert callback(client, state).status_code == 400
@@ -99,7 +99,7 @@ def test_oauth_never_automatically_links_email_collision(github):
     response = callback(client, start(client)["state"][0])
     assert response.status_code == 409
     assert client.get("/api/auth/me").status_code == 401
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         assert conn.execute("select count(*) from oauth_accounts").fetchone()[0] == 0
         assert conn.execute("select count(*) from users").fetchone()[0] == 1
     client.post("/api/auth/login", json={"identity": "alice", "password": "example-password"})
@@ -133,12 +133,12 @@ def test_oauth_link_requires_the_original_current_browser_session(github, replac
     elif replacement == "logout":
         client.post("/api/auth/logout", headers={"X-CSRF-Token": client.cookies["tts_csrf"]})
     else:
-        with db.connect_database() as conn:
+        with database_service.connect_database() as conn:
             conn.execute("delete from auth_sessions")
             conn.commit()
     assert callback(client, state).status_code in (401, 409)
     assert not github["exchanges"]
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         assert conn.execute("select count(*) from oauth_accounts").fetchone()[0] == 0
 
 
@@ -156,7 +156,7 @@ def test_oauth_only_recovery_email_requires_provider_proof_or_local_password(git
 
     token = issue_email_token("github@example.com", "reset")
     assert client.post("/api/auth/password/reset", json={"token": token, "password": "new-password"}).status_code == 200
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         username = conn.execute("select username from users").fetchone()[0]
     assert client.post("/api/auth/login", json={"identity": username, "password": "new-password"}).status_code == 200
 

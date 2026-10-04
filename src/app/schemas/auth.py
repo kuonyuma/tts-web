@@ -3,6 +3,7 @@ import re
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
 from app.schemas.users import RegisterUserRequest, UserResponse
+from app.validation import normalize_email, validate_unicode
 
 
 class LoginRequest(BaseModel):
@@ -19,10 +20,7 @@ class LoginRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_unicode(cls, value: SecretStr) -> SecretStr:
-        try:
-            value.get_secret_value().encode("utf-8")
-        except UnicodeEncodeError:
-            raise ValueError("Password must contain valid Unicode characters") from None
+        validate_unicode(value.get_secret_value(), "Password must contain valid Unicode characters")
         return value
 
 
@@ -38,10 +36,7 @@ class EmailRequest(BaseModel):
 
     email: EmailStr
 
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls, value: str) -> str:
-        return value.casefold()
+    _normalize_email = field_validator("email")(normalize_email)
 
 
 class EmailChangeRequest(EmailRequest):

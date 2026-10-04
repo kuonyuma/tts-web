@@ -1,23 +1,13 @@
-import pytest
 from app.services import cache_service
 from app.services.cache_service import (
     compute_cache_key,
     compute_flow_cache_key,
     get_cached_flow,
     put_flow_cache,
-    delete_audio_cache,
     _memory_cache,
     _flow_cache,
 )
 from app.services.engines.base import SentenceCue
-
-
-@pytest.fixture(autouse=True)
-def clean_test_cache():
-    test_key = "0123456789abcdef"
-    delete_audio_cache(test_key)
-    yield
-    delete_audio_cache(test_key)
 
 
 def test_flow_cache_key_distinct():
@@ -91,8 +81,11 @@ def test_get_cached_flow_missing_sidecar():
     assert get_cached_flow(test_key) is None
 
 
-def test_delete_audio_cache_removes_both():
-    """Verify delete_audio_cache cleans up both the MP3 and the JSON sidecar."""
+def test_cache_eviction_removes_audio_and_timeline(monkeypatch):
+    """Capacity eviction removes paired files and both memory entries."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "CACHE_MAX_ENTRIES", 1)
     test_key = "0123456789abcdef"
     put_flow_cache(test_key, b"audio", "edge", "voice", [SentenceCue("a", 0, 10)])
 
@@ -100,7 +93,7 @@ def test_delete_audio_cache_removes_both():
     json_file = cache_service.CACHE_DIR / f"{test_key}.timeline.json"
     assert mp3_file.exists() and json_file.exists()
 
-    delete_audio_cache(test_key)
+    put_flow_cache("fedcba9876543210", b"new audio", "edge", "voice", [SentenceCue("b", 0, 10)])
     assert not mp3_file.exists()
     assert not json_file.exists()
     assert test_key not in _memory_cache

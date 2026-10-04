@@ -27,18 +27,19 @@ _flow_cache: LRUCache = LRUCache(
 )
 
 
-def compute_cache_key(text: str, voice: str, engine: str, model: str | None = None) -> str:
+def _compute_key(contract: str, text: str, voice: str, engine: str, model: str | None) -> str:
     model = model or (settings.GEMINI_TTS_MODEL if engine == "gemini" else engine)
-    raw = json.dumps(["audio-v3", *synthesis_identity(text, engine, voice, model, settings.TTS_CACHE_REVISION)],
+    raw = json.dumps([contract, *synthesis_identity(text, engine, voice, model, settings.TTS_CACHE_REVISION)],
                      ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def compute_cache_key(text: str, voice: str, engine: str, model: str | None = None) -> str:
+    return _compute_key("audio-v3", text, voice, engine, model)
 
 
 def compute_flow_cache_key(text: str, voice: str, engine: str, model: str | None = None) -> str:
-    model = model or (settings.GEMINI_TTS_MODEL if engine == "gemini" else engine)
-    raw = json.dumps(["sentence-flow-v3", *synthesis_identity(text, engine, voice, model, settings.TTS_CACHE_REVISION)],
-                     ensure_ascii=False, separators=(",", ":"))
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    return _compute_key("sentence-flow-v3", text, voice, engine, model)
 
 
 def _path(key: str, suffix: str) -> Path:
@@ -67,15 +68,40 @@ def _delete(key: str) -> None:
 
 
 def _entries() -> list[tuple[float, str, int]]:
-    entries = []
-    for audio in CACHE_DIR.glob("*.mp3"):
-        key = audio.stem
-        if not re.fullmatch(CACHE_KEY_PATTERN, key) or audio.is_symlink():
+    try:
+        with os.scandir(CACHE_DIR) as it:
+            scanned = list(it)
+    except FileNotFoundError:
+        return []
+
+    timeline_sizes: dict[str, int] = {}
+    mp3_entries: list[tuple[os.DirEntry, str]] = []
+
+    for entry in scanned:
+        try:
+            if entry.is_symlink():
+                continue
+            name = entry.name
+            if name.endswith(".timeline.json"):
+                stem = name[:-14]
+                if re.fullmatch(CACHE_KEY_PATTERN, stem):
+                    timeline_sizes[stem] = entry.stat().st_size
+            elif name.endswith(".mp3"):
+                stem = name[:-4]
+                if re.fullmatch(CACHE_KEY_PATTERN, stem):
+                    mp3_entries.append((entry, stem))
+        except OSError:
             continue
-        timeline = _path(key, ".timeline.json")
-        stat = audio.stat()
-        size = stat.st_size + (timeline.stat().st_size if timeline.exists() else 0)
-        entries.append((stat.st_mtime, key, size))
+
+    entries = []
+    for entry, key in mp3_entries:
+        try:
+            stat = entry.stat()
+            size = stat.st_size + timeline_sizes.get(key, 0)
+            entries.append((stat.st_mtime, key, size))
+        except OSError:
+            continue
+
     return sorted(entries)
 
 
@@ -176,7 +202,7 @@ def _write_temp(path: Path, data: bytes) -> None:
 
 def _put(cache_key: str, audio: bytes, timeline: dict | None = None) -> None:
     if not 0 < len(audio) <= settings.MAX_AUDIO_BYTES:
-        raise TTSUpstreamError(502, "Invalid audio size")
+        raise TTSUpstreamError(502)
     with _lock:
         audio_path = _path(cache_key, ".mp3")
         timeline_path = _path(cache_key, ".timeline.json")
@@ -226,8 +252,3 @@ def put_flow_cache(
         "version": 1, "engine": engine, "voice": voice,
         "audio_sha256": hashlib.sha256(audio_bytes).hexdigest(), "sentences": cues,
     })
-
-
-def delete_audio_cache(cache_key: str) -> None:
-    with _lock:
-        _delete(cache_key)

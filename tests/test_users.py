@@ -1,3 +1,4 @@
+from app.services import database as database_service
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -30,7 +31,7 @@ def test_register_persists_user_and_returns_only_public_fields():
     assert datetime.fromisoformat(data["created_at"]).utcoffset().total_seconds() == 0
     assert data["created_at"] == data["updated_at"]
     assert "no-store" in response.headers["cache-control"]
-    with history.connect_database() as conn:
+    with database_service.connect_database() as conn:
         row = conn.execute("select * from users where id = ?", (data["id"],)).fetchone()
         assert row["username"] == "user123"
         assert "password" not in row.keys()
@@ -46,7 +47,7 @@ def test_duplicate_username_returns_conflict_without_overwriting(duplicate):
     assert response.status_code == 409
     assert set(response.json()) == {"detail"}
     assert "password_hash" not in response.text
-    with history.connect_database() as conn:
+    with database_service.connect_database() as conn:
         rows = conn.execute("select * from users").fetchall()
         assert len(rows) == 1
         assert PasswordHasher().verify(rows[0]["password_hash"], PASSWORD)
@@ -62,7 +63,7 @@ def test_invalid_username_is_rejected_before_storage(username):
     assert PASSWORD not in response.text
     assert "password_hash" not in response.text
     assert "input" not in response.json()["detail"][0]
-    assert not history.DB_PATH.exists()
+    assert not database_service.DB_PATH.exists()
 
 
 @pytest.mark.parametrize("password", ["", "1234567", "a" * 129, " " * 8, None, 123, []])
@@ -70,7 +71,7 @@ def test_invalid_password_is_rejected_without_echo(password):
     response = register(password=password)
     assert response.status_code == 422
     assert "input" not in response.json()["detail"][0]
-    assert not history.DB_PATH.exists()
+    assert not database_service.DB_PATH.exists()
 
 
 def test_invalid_unicode_password_is_safe_validation_error():
@@ -99,7 +100,7 @@ def test_missing_or_unknown_registration_fields_are_rejected(payload):
 def test_valid_boundaries_preserve_exact_password(username, password):
     response = register(username, password)
     assert response.status_code == 201
-    with history.connect_database() as conn:
+    with database_service.connect_database() as conn:
         row = conn.execute("select password_hash from users").fetchone()
         assert PasswordHasher().verify(row["password_hash"], password)
 
@@ -132,7 +133,7 @@ def test_same_password_uses_different_salts_and_secret_reprs(caplog):
 def test_concurrent_registrations_have_one_winner():
     from app.services import user_service
 
-    history.init_db()
+    database_service.init_db()
     barrier = Barrier(2)
     real_hash = user_service.hash_password
 
@@ -150,13 +151,13 @@ def test_concurrent_registrations_have_one_winner():
         futures = [pool.submit(create, name) for name in ("racing", "RACING")]
         responses = [future.result(timeout=15) for future in futures]
     assert sorted(response.status_code for response in responses) == [201, 409]
-    with history.connect_database() as conn:
+    with database_service.connect_database() as conn:
         assert conn.execute("select count(*) from users").fetchone()[0] == 1
 
 
 def test_database_constraints_prevent_case_duplicates_and_nulls():
     assert register().status_code == 201
-    with history.connect_database() as conn:
+    with database_service.connect_database() as conn:
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
                 "insert into users (username, password_hash, created_at, updated_at) "
@@ -168,8 +169,8 @@ def test_database_constraints_prevent_case_duplicates_and_nulls():
 
 
 def test_storage_failure_is_safe_and_does_not_create_user(caplog):
-    history.init_db()
-    with history.connect_database() as conn:
+    database_service.init_db()
+    with database_service.connect_database() as conn:
         conn.execute("""
             create trigger fail_user_insert before insert on users
             begin select raise(abort, 'private SQL failure example-password'); end
@@ -181,7 +182,7 @@ def test_storage_failure_is_safe_and_does_not_create_user(caplog):
     assert "private SQL" not in response.text + caplog.text
     assert PASSWORD not in response.text + caplog.text
     assert "no-store" in response.headers["cache-control"]
-    with history.connect_database() as conn:
+    with database_service.connect_database() as conn:
         assert conn.execute("select count(*) from users").fetchone()[0] == 0
         conn.execute("drop trigger fail_user_insert")
         conn.commit()
@@ -189,8 +190,8 @@ def test_storage_failure_is_safe_and_does_not_create_user(caplog):
 
 
 def test_commit_failure_rolls_back_without_success_response(monkeypatch):
-    history.init_db()
-    connect = history.connect_database
+    database_service.init_db()
+    connect = database_service.connect_database
 
     class FailedCommit(sqlite3.Connection):
         def __exit__(self, exc_type, exc_value, traceback):
@@ -199,12 +200,12 @@ def test_commit_failure_rolls_back_without_success_response(monkeypatch):
             return super().__exit__(exc_type, exc_value, traceback)
 
     def failing_connection():
-        conn = sqlite3.connect(history.DB_PATH, factory=FailedCommit)
+        conn = sqlite3.connect(database_service.DB_PATH, factory=FailedCommit)
         conn.row_factory = sqlite3.Row
         return conn
 
     with monkeypatch.context() as context:
-        context.setattr(history, "connect_database", failing_connection)
+        context.setattr(database_service, "connect_database", failing_connection)
         response = register()
     assert response.status_code == 503
     assert "private commit" not in response.text
@@ -217,9 +218,9 @@ def test_commit_failure_rolls_back_without_success_response(monkeypatch):
 def test_locked_database_returns_safe_error_and_recovers(monkeypatch):
     from app.config import settings
 
-    history.init_db()
+    database_service.init_db()
     monkeypatch.setattr(settings, "DB_BUSY_TIMEOUT_SECONDS", 0.01)
-    conn = history.connect_database()
+    conn = database_service.connect_database()
     try:
         conn.execute("begin immediate")
         response = register()
@@ -233,7 +234,7 @@ def test_locked_database_returns_safe_error_and_recovers(monkeypatch):
 
 def test_migration_repeated_initialization_preserves_accounts_and_legacy_history(monkeypatch):
     # Simulate a pre-client_id database, including original IDs and dates.
-    with sqlite3.connect(history.DB_PATH) as conn:
+    with sqlite3.connect(database_service.DB_PATH) as conn:
         conn.execute("""
             create table history (
                 id integer primary key, text text, voice text, model text, cache_key text,
@@ -247,11 +248,11 @@ def test_migration_repeated_initialization_preserves_accounts_and_legacy_history
             )
         """)
     assert register().status_code == 201
-    with history.connect_database() as conn:
+    with database_service.connect_database() as conn:
         account = dict(conn.execute("select * from users").fetchone())
-    monkeypatch.setattr(history, "_initialized", False)
-    history.init_db()
-    with history.connect_database() as conn:
+    monkeypatch.setattr(database_service, "_initialized", False)
+    database_service.init_db()
+    with database_service.connect_database() as conn:
         assert dict(conn.execute("select * from users").fetchone()) == account
         legacy = conn.execute("select * from history").fetchone()
         assert legacy["id"] == 7
@@ -267,12 +268,12 @@ def test_migration_failure_rolls_back_users_table_and_can_retry():
         migrate_users(conn)
         raise sqlite3.OperationalError("injected migration failure")
 
-    with patch.object(history, "migrate_users", fail_after_ddl):
+    with patch.object(database_service, "migrate_users", fail_after_ddl):
         with pytest.raises(sqlite3.OperationalError):
-            history.init_db()
-    with sqlite3.connect(history.DB_PATH) as conn:
+            database_service.init_db()
+    with sqlite3.connect(database_service.DB_PATH) as conn:
         assert conn.execute("select name from sqlite_master where name='users'").fetchone() is None
-    assert not history._initialized
+    assert not database_service._initialized
     assert register().status_code == 201
 
 
@@ -286,5 +287,5 @@ def test_legacy_cleanup_keeps_registered_users():
     spec = importlib.util.spec_from_file_location("account_cleanup_test", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert module.cleanup(history.DB_PATH.parent, apply=True)["history_rows"] == 1
+    assert module.cleanup(database_service.DB_PATH.parent, apply=True)["history_rows"] == 1
     assert register().status_code == 409

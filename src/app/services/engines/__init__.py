@@ -1,13 +1,7 @@
 from app.config import settings
 from app.services.engines.base import BaseTTSEngine, VoiceInfo
 from app.services.engines.edge_engine import EdgeTTSEngine
-from app.services.engines.gemini_engine import (
-    GeminiTTSEngine,
-    TTSException,
-    TTSConfigError,
-    TTSTimeoutError,
-    TTSUpstreamError,
-)
+from app.services.engines.gemini_engine import GeminiTTSEngine
 
 # Registry of supported engines
 _ENGINES: dict[str, BaseTTSEngine] = {
@@ -59,8 +53,4 @@ __all__ = [
     "get_engine",
     "list_engines_meta",
     "DEFAULT_ENGINE_ID",
-    "TTSException",
-    "TTSConfigError",
-    "TTSTimeoutError",
-    "TTSUpstreamError",
 ]

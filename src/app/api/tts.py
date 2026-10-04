@@ -9,8 +9,7 @@ from app.services.gemini_client import create_client, managed_client
 from app.services.runtime import request_deadline, upstream_slot
 from app.services.tts_service import TTSService, get_tts_service
 from app.services.tts_storage import TTSResult
-
-REPLAY_KEY_PATTERN = r"^(?:[0-9a-f]{16}|[0-9a-f]{64})$"
+from app.validation import REPLAY_KEY_PATTERN
 
 router = APIRouter(prefix="/api", tags=["tts"])
 
@@ -34,7 +33,7 @@ async def test_gemini_key(payload: TestKeyRequest):
                 )
                 if interaction.output_audio and interaction.output_audio.data:
                     return TestKeyResponse(valid=True, message="Gemini API Key 验证成功！")
-                raise TTSUpstreamError(502, "Empty audio response")
+                raise TTSUpstreamError(502)
     except TTSException:
         raise
     except Exception as exc:

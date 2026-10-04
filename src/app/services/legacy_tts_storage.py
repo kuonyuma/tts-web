@@ -2,7 +2,7 @@
 
 import re
 
-from app.services import cache_service as cache, history_service as history
+from app.services import cache_service as cache, history_service as history, database
 from app.services.errors import TTSNotFoundError, TTSAudioTooLargeError
 from app.services.tts_storage import AudioAsset, SynthesisPlan, SynthesisSpec
 from app.validation import CACHE_KEY_PATTERN
@@ -73,5 +73,5 @@ class LegacyTTSStorage:
         return history.clear_all_history(client_id=owner)
 
     def initialize(self) -> None:
-        history.init_db()
+        database.init_db()
         cache.cleanup_cache()

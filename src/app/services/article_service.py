@@ -1,5 +1,7 @@
-from app.services.auth_storage import account_connection
-from app.services.history_service import utc_timestamp
+import time
+from datetime import datetime, timezone
+from app.services.database import connection as account_connection
+from app.services.timestamps import utc_timestamp
 from app.schemas.articles import ArticleCreate, ArticleUpdate
 
 
@@ -79,20 +81,36 @@ def update_article(user_id: int, article_id: str, body: ArticleUpdate) -> dict:
 def delete_article(user_id: int, article_id: str) -> None:
     with account_connection(write=True) as conn:
         existing = conn.execute("select user_id,deleted from articles where id=?", (article_id,)).fetchone()
+        now = utc_timestamp()
         if existing is None:
             # DELETE can arrive before an aborted POST finishes. Commit a tombstone
             # even for a missing UUID so that the late POST cannot create it.
-            now = utc_timestamp()
+            # Insert directly in final tombstone state, avoiding redundant immediate UPDATE.
             conn.execute(
-                "insert into articles(id,user_id,title,content,created_at,updated_at,deleted) "
-                "values(?,?,'','',?,?,1)", (article_id, user_id, now, now),
+                "insert into articles(id,user_id,title,content,created_at,updated_at,deleted,revision) "
+                "values(?,?,'','',?,?,1,1)", (article_id, user_id, now, now),
             )
         else:
             owned_article(conn, user_id, article_id)
-        # Keep the UUID tombstone, but discard text; late updates cannot recreate it.
-        conn.execute(
-            "update articles set deleted=1,title='',content='',revision=revision+1,updated_at=? "
-            "where id=? and user_id=?", (utc_timestamp(), article_id, user_id),
-        )
+            # Keep the UUID tombstone, but discard text; late updates cannot recreate it.
+            conn.execute(
+                "update articles set deleted=1,title='',content='',revision=revision+1,updated_at=? "
+                "where id=? and user_id=?", (now, article_id, user_id),
+            )
     if existing is None:
         raise ArticleError(404, "文章不存在或已删除。")
+
+
+def prune_tombstones(older_than_seconds: float = 7 * 86400.0) -> int:
+    """Delete tombstones older than the retention window.
+
+    Late POST requests beyond this window will no longer be rejected with 410,
+    freeing database storage capacity.
+    """
+    cutoff = datetime.fromtimestamp(time.time() - older_than_seconds, timezone.utc).isoformat()
+    with account_connection(write=True) as conn:
+        cursor = conn.execute(
+            "delete from articles where deleted=1 and updated_at < ?",
+            (cutoff,)
+        )
+        return cursor.rowcount

@@ -2,11 +2,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.validation import validate_text
+from app.validation import REPLAY_KEY_PATTERN, validate_text, validate_unicode
 
 
 ExplainLang = Literal["zh", "ja", "en"]
-EXPLAIN_KEY_PATTERN = r"^(?:[0-9a-f]{16}|[0-9a-f]{64})$"
 EXPLAIN_CONTEXT_PATTERN = r"^[A-Za-z0-9_-]{1,128}$"
 
 
@@ -59,7 +58,7 @@ class ExplainResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    explain_key: str = Field(..., pattern=EXPLAIN_KEY_PATTERN)
+    explain_key: str = Field(..., pattern=REPLAY_KEY_PATTERN)
     mode_id: str | None = Field(default=None, min_length=1, max_length=32)
     message: str = Field(..., min_length=1, max_length=500)
 
@@ -69,11 +68,7 @@ class ChatRequest(BaseModel):
         trimmed = value.strip()
         if not trimmed:
             raise ValueError("Message cannot be empty or only whitespace.")
-        try:
-            trimmed.encode("utf-8")
-        except UnicodeEncodeError:
-            raise ValueError("Message must contain valid Unicode characters") from None
-        return trimmed
+        return validate_unicode(trimmed, "Message must contain valid Unicode characters")
 
 
 class ChatResponse(BaseModel):

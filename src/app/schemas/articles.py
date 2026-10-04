@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.validation import validate_unicode
 
 
 class ArticleText(BaseModel):
@@ -11,11 +12,7 @@ class ArticleText(BaseModel):
     @field_validator("title", "content")
     @classmethod
     def valid_unicode(cls, value: str) -> str:
-        try:
-            value.encode("utf-8")
-        except UnicodeEncodeError:
-            raise ValueError("文章包含无效的 Unicode 字符。") from None
-        return value
+        return validate_unicode(value, "文章包含无效的 Unicode 字符。")
 
 
 class ArticleCreate(ArticleText):

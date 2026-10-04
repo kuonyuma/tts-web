@@ -1,3 +1,4 @@
+from app.services import database as database_service
 import asyncio
 from unittest.mock import AsyncMock, patch
 
@@ -69,7 +70,7 @@ def test_explain_success_miss(mock_generate, _mock_get, mock_save):
     assert data["model_id"] == "deepseek-flash"
     assert data["mode_id"] == "direct"
     assert len(data["explain_key"]) == 64
-    assert mock_generate.call_args.kwargs == {
+    assert {key: mock_generate.call_args.kwargs[key] for key in ("text", "lang", "model_id", "mode_id")} == {
         "text": "Hello.", "lang": "zh", "model_id": "deepseek-flash", "mode_id": "direct"
     }
     assert "api_key" not in mock_generate.call_args.kwargs
@@ -437,11 +438,11 @@ def test_generate_calls_gateway_with_structured_messages():
 
 def test_explain_full_database_zero_paid_calls(tmp_path, monkeypatch):
     import sqlite3
-    from app.services import explain_service, history_service
+    from app.services import explain_service
 
     test_db = tmp_path / "test_explain.db"
-    monkeypatch.setattr(history_service, "DB_PATH", test_db)
-    monkeypatch.setattr(history_service, "_initialized", False)
+    monkeypatch.setattr(database_service, "DB_PATH", test_db)
+    monkeypatch.setattr(database_service, "_initialized", False)
     monkeypatch.setattr(explain_service, "_initialized", False)
     monkeypatch.setattr(settings, "EXPLANATION_MAX_RECORDS", 1)
 
@@ -475,12 +476,12 @@ def test_explain_full_database_zero_paid_calls(tmp_path, monkeypatch):
 
 def test_storage_reservation_contention_and_cleanup(tmp_path, monkeypatch):
     import time
-    from app.services import explain_service, history_service
+    from app.services import explain_service
     from app.services.errors import StorageFullError
 
     test_db = tmp_path / "test_res.db"
-    monkeypatch.setattr(history_service, "DB_PATH", test_db)
-    monkeypatch.setattr(history_service, "_initialized", False)
+    monkeypatch.setattr(database_service, "DB_PATH", test_db)
+    monkeypatch.setattr(database_service, "_initialized", False)
     monkeypatch.setattr(explain_service, "_initialized", False)
     monkeypatch.setattr(settings, "EXPLANATION_MAX_RECORDS", 1)
 
@@ -517,11 +518,11 @@ def test_storage_reservation_contention_and_cleanup(tmp_path, monkeypatch):
 def test_save_explanation_retries_transient_locked_database(tmp_path, monkeypatch):
     import sqlite3
     from contextlib import contextmanager
-    from app.services import explain_service, history_service
+    from app.services import explain_service
 
     test_db = tmp_path / "test_retry.db"
-    monkeypatch.setattr(history_service, "DB_PATH", test_db)
-    monkeypatch.setattr(history_service, "_initialized", False)
+    monkeypatch.setattr(database_service, "DB_PATH", test_db)
+    monkeypatch.setattr(database_service, "_initialized", False)
     monkeypatch.setattr(explain_service, "_initialized", False)
 
     key = build_explain_key("retry sentence", "zh")
@@ -549,3 +550,151 @@ def test_save_explanation_retries_transient_locked_database(tmp_path, monkeypatc
     stored = explain_service.get_explanation(TEST_CLIENT, key)
     assert stored is not None
     assert stored["explanation"] == "saved explanation after retry"
+
+
+def test_usage_write_failure_rolls_back_explanation_and_keeps_reservation():
+    import sqlite3
+    from app.services import explain_service
+
+    key = build_explain_key("atomic ledger", "zh")
+    token = explain_service.reserve_storage_slot(TEST_CLIENT, key)
+    with explain_service._get_conn() as conn:
+        conn.execute("""
+            create trigger reject_daily_usage before insert on copilot_usage_daily
+            begin select raise(abort, 'injected ledger failure'); end
+        """)
+        conn.commit()
+    with pytest.raises(sqlite3.IntegrityError):
+        explain_service.save_explanation(
+            TEST_CLIENT, "atomic ledger", "zh", key, "answer",
+            quota_units=1, usage={"total_tokens": 10}, reservation_token=token,
+        )
+    assert explain_service.get_explanation(TEST_CLIENT, key) is None
+    with explain_service._get_conn() as conn:
+        assert conn.execute("select count(*) from copilot_usage_daily").fetchone()[0] == 0
+        assert conn.execute("select token from explanation_storage_reservations").fetchone()[0] == token
+
+def test_invalid_or_expired_reservation_token_cannot_bypass_quota(tmp_path, monkeypatch):
+    import time
+    from app.services import explain_service
+    from app.services.errors import StorageFullError
+
+    test_db = tmp_path / "test_res_bypass.db"
+    monkeypatch.setattr(database_service, "DB_PATH", test_db)
+    monkeypatch.setattr(database_service, "_initialized", False)
+    monkeypatch.setattr(explain_service, "_initialized", False)
+    monkeypatch.setattr(settings, "EXPLANATION_MAX_RECORDS", 1)
+
+    key1 = build_explain_key("first sentence", "zh")
+    token1 = explain_service.reserve_storage_slot("alice", key1)
+    explain_service.save_explanation("alice", "first sentence", "zh", key1, "answer 1", reservation_token=token1)
+    assert explain_service.get_explanation("alice", key1) is not None
+
+    key2 = build_explain_key("second sentence", "zh")
+
+    # 1. Non-existent token cannot bypass full quota
+    with pytest.raises(StorageFullError):
+        explain_service.save_explanation("alice", "second sentence", "zh", key2, "answer 2", reservation_token="non-existent")
+
+    # 2. Expired token cannot bypass full quota
+    with explain_service._get_conn() as conn:
+        conn.execute(
+            "insert into explanation_storage_reservations (token, client_id, explain_key, expires_at) values (?, ?, ?, ?)",
+            ("expired-token", "alice", key2, time.time() - 100),
+        )
+        conn.commit()
+
+    with pytest.raises(StorageFullError):
+        explain_service.save_explanation("alice", "second sentence", "zh", key2, "answer 2", reservation_token="expired-token")
+
+    # 3. Wrong owner token cannot bypass full quota
+    with explain_service._get_conn() as conn:
+        conn.execute(
+            "insert into explanation_storage_reservations (token, client_id, explain_key, expires_at) values (?, ?, ?, ?)",
+            ("bob-token", "bob", key2, time.time() + 100),
+        )
+        conn.commit()
+
+    with pytest.raises(StorageFullError):
+        explain_service.save_explanation("alice", "second sentence", "zh", key2, "answer 2", reservation_token="bob-token")
+
+    # 4. Wrong explain_key token cannot bypass full quota
+    key3 = build_explain_key("third sentence", "zh")
+    with explain_service._get_conn() as conn:
+        conn.execute(
+            "insert into explanation_storage_reservations (token, client_id, explain_key, expires_at) values (?, ?, ?, ?)",
+            ("wrong-key-token", "alice", key3, time.time() + 100),
+        )
+        conn.commit()
+
+    with pytest.raises(StorageFullError):
+        explain_service.save_explanation("alice", "second sentence", "zh", key2, "answer 2", reservation_token="wrong-key-token")
+
+
+def test_explanation_delete_and_clear_releases_capacity(tmp_path, monkeypatch):
+    from app.services import explain_service
+    from app.services.errors import StorageFullError
+
+    test_db = tmp_path / "test_explain_lifecycle.db"
+    monkeypatch.setattr(database_service, "DB_PATH", test_db)
+    monkeypatch.setattr(database_service, "_initialized", False)
+    monkeypatch.setattr(explain_service, "_initialized", False)
+    monkeypatch.setattr(settings, "EXPLANATION_MAX_RECORDS", 1)
+
+    key1 = build_explain_key("sentence one", "zh")
+    key2 = build_explain_key("sentence two", "zh")
+
+    token1 = explain_service.reserve_storage_slot("alice", key1)
+    explain_service.save_explanation("alice", "sentence one", "zh", key1, "answer 1", reservation_token=token1)
+
+    # Bob cannot reserve or save because capacity is full
+    with pytest.raises(StorageFullError):
+        explain_service.reserve_storage_slot("bob", key2)
+
+    # Bob cannot delete Alice's explanation
+    assert not explain_service.delete_explanation("bob", key1)
+
+    # Alice deletes her explanation, releasing the slot
+    assert explain_service.delete_explanation("alice", key1)
+    assert explain_service.get_explanation("alice", key1) is None
+
+    # Now Bob can reserve and save
+    token2 = explain_service.reserve_storage_slot("bob", key2)
+    explain_service.save_explanation("bob", "sentence two", "zh", key2, "answer 2", reservation_token=token2)
+    assert explain_service.get_explanation("bob", key2) is not None
+
+    # Clear explanations removes all records for client
+    deleted_count = explain_service.clear_explanations("bob")
+    assert deleted_count == 1
+    assert explain_service.get_explanation("bob", key2) is None
+
+
+def test_explain_api_delete_endpoints(tmp_path, monkeypatch):
+    from app.services import explain_service
+
+    test_db = tmp_path / "test_explain_api_delete.db"
+    monkeypatch.setattr(database_service, "DB_PATH", test_db)
+    monkeypatch.setattr(database_service, "_initialized", False)
+    monkeypatch.setattr(explain_service, "_initialized", False)
+
+    key = build_explain_key("api sentence", "zh")
+    explain_service.save_explanation(TEST_CLIENT, "api sentence", "zh", key, "api explanation")
+
+    # DELETE /api/explain/{explain_key} with wrong client
+    resp = client.delete(f"/api/explain/{key}", headers={"X-Client-ID": "other-user"})
+    assert resp.status_code == 404
+
+    # DELETE /api/explain/{explain_key} with correct client
+    resp = client.delete(f"/api/explain/{key}", headers={"X-Client-ID": TEST_CLIENT})
+    assert resp.status_code == 204
+
+    # Already deleted -> 404
+    resp = client.delete(f"/api/explain/{key}", headers={"X-Client-ID": TEST_CLIENT})
+    assert resp.status_code == 404
+
+    # Save again and clear all
+    explain_service.save_explanation(TEST_CLIENT, "api sentence", "zh", key, "api explanation")
+    resp = client.delete("/api/explain", headers={"X-Client-ID": TEST_CLIENT})
+    assert resp.status_code == 204
+    assert explain_service.get_explanation(TEST_CLIENT, key) is None
+

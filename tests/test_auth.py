@@ -1,3 +1,4 @@
+from app.services import database as database_service
 import sqlite3
 
 import pytest
@@ -5,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import app
-from app.services import history_service as db
 
 
 PASSWORD = "example-password"
@@ -65,7 +65,7 @@ def test_invalid_login_has_uniform_error(client):
 def test_login_rejection_logs_reason_without_credentials(client, caplog, identity, active, reason):
     user = create_user(client, email="alice@gmail.com")
     if not active:
-        with db.connect_database() as conn:
+        with database_service.connect_database() as conn:
             conn.execute("update users set is_active=0 where id=?", (user["id"],))
             conn.commit()
     caplog.clear()
@@ -184,7 +184,7 @@ def test_admin_permission_is_checked_live_and_disable_revokes_sessions(client):
     alice = create_user(client)
     bob_client = TestClient(app)
     bob = create_user(bob_client, "bobby")
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         conn.execute("update users set role='admin' where id=?", (alice["id"],))
         conn.commit()
     login(client)
@@ -203,7 +203,7 @@ def test_auth_required_rejects_anonymous_business_and_spoofed_client(client, mon
     assert client.get("/api/history", headers={"X-Client-ID": "browser-client"}).status_code == 401
     login(client)
     assert client.get("/api/history").status_code == 403
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         conn.execute("update users set email_verified=1 where id=?", (user["id"],))
         conn.commit()
     assert client.get("/api/history", headers={"X-Client-ID": "victim"}).status_code == 200
@@ -215,14 +215,14 @@ def test_legacy_user_migration_preserves_password(client, monkeypatch):
     from app.services.passwords import hash_password
 
     original = hash_password(PASSWORD)
-    with sqlite3.connect(db.DB_PATH) as conn:
+    with sqlite3.connect(database_service.DB_PATH) as conn:
         conn.execute("create table users (id integer primary key, username text unique not null, "
                      "password_hash text not null, created_at text not null, updated_at text not null)")
         conn.execute("insert into users values (17, 'olduser', ?, '2020-01-01T00:00:00+00:00', '2020-01-01T00:00:00+00:00')", (original,))
-    db.init_db()
+    database_service.init_db()
     assert login(client, "olduser").status_code == 200
     assert client.get("/api/auth/me").json()["id"] == 17
-    monkeypatch.setattr(db, "_initialized", False)
-    db.init_db()
-    with db.connect_database() as conn:
+    monkeypatch.setattr(database_service, "_initialized", False)
+    database_service.init_db()
+    with database_service.connect_database() as conn:
         assert conn.execute("select password_hash from users where id=17").fetchone()[0] == original

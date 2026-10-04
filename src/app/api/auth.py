@@ -27,8 +27,12 @@ def admin_account(context: auth.AuthContext = Depends(current_account)) -> auth.
     return context
 
 
+def _secure_cookies() -> bool:
+    return settings.APP_ENV == "production" or settings.PUBLIC_BASE_URL.startswith("https://")
+
+
 def set_login_cookies(response: Response, token: str, csrf: str) -> None:
-    secure = settings.APP_ENV == "production" or settings.PUBLIC_BASE_URL.startswith("https://")
+    secure = _secure_cookies()
     response.set_cookie(auth.SESSION_COOKIE, token, max_age=settings.AUTH_SESSION_SECONDS,
                         httponly=True, secure=secure, samesite="lax", path="/")
     response.set_cookie(auth.CSRF_COOKIE, csrf, max_age=settings.AUTH_SESSION_SECONDS,
@@ -111,7 +115,7 @@ def reset_password(body: ResetPasswordRequest, response: Response):
 
 def set_oauth_cookie(response: Response, browser: str) -> None:
     response.set_cookie(oauth.OAUTH_COOKIE, browser, max_age=600, httponly=True, samesite="lax",
-                        secure=settings.APP_ENV == "production" or settings.PUBLIC_BASE_URL.startswith("https://"),
+                        secure=_secure_cookies(),
                         path="/api/auth/oauth/github")
 
 

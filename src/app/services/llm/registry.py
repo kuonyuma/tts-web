@@ -82,8 +82,9 @@ def provider_api_key(provider: str) -> str:
 
 def catalog() -> list[dict]:
     result = []
+    registered = profiles()
     for model_id in settings.COPILOT_ENABLED_MODELS:
-        profile = profiles().get(model_id)
+        profile = registered.get(model_id)
         if profile is None:
             continue
         if model_id == "glm-5.3-flash" and not settings.COPILOT_ENABLE_UNVERIFIED_GLM53:

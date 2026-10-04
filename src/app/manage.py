@@ -6,8 +6,8 @@ import getpass
 from pydantic import ValidationError
 
 from app.schemas.users import RegisterUserRequest
-from app.services.auth_storage import account_connection
-from app.services.history_service import utc_timestamp
+from app.services.database import connection as account_connection
+from app.services.timestamps import utc_timestamp
 from app.services.user_service import UsernameTakenError, register_user
 
 

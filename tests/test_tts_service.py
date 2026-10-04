@@ -1,3 +1,4 @@
+from app.services import database as database_service
 """Business behavior with real isolated storage and mocked network synthesis."""
 
 import sqlite3
@@ -8,7 +9,7 @@ import pytest
 
 from app.config import settings
 from app.schemas.tts import TTSRequest
-from app.services import history_service, private_tts_storage, tts_service
+from app.services import private_tts_storage, tts_service
 from app.services.engines.base import SentenceCue, TimedSynthesisResult
 from app.services.errors import StorageFullError, TTSConfigError, TTSNotFoundError, TTSAudioTooLargeError
 
@@ -122,7 +123,7 @@ async def test_private_manifest_read_does_not_touch_playback_time(service):
     with patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize_with_timeline", new_callable=AsyncMock, return_value=timed):
         result = await business.generate("alice", TTSRequest(text="hello"), None, flow=True)
     table = "tts_history_v2" if mode == "private" else "history"
-    with sqlite3.connect(history_service.DB_PATH) as connection:
+    with sqlite3.connect(database_service.DB_PATH) as connection:
         connection.execute(f"update {table} set last_played_at='2000-01-01 00:00:00'")
     await business.replay("alice", result.key, flow=True)
     history = await business.list_history("alice")

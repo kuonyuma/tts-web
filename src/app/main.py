@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, HTMLResponse
 
 from app.api.tts import router as tts_router
 from app.api.explain import router as explain_router
@@ -19,15 +19,15 @@ from app.api.auth import router as auth_router
 from app.api.articles import router as articles_router
 from app.services.article_service import ArticleError
 from app.services.auth_service import AuthError, SESSION_COOKIE, CSRF_COOKIE
-from app.services.history_service import init_db
+from app.services.database import init_db
 from app.config import settings
 from app.api.limits import RequestLimits
 from app.api.security import SecurityHeaders
 from app.services.tts_storage import get_tts_storage
-from app.services.llm.gateway import get_catalog
+from app.services.llm.registry import catalog
 from app.services.llm.quota import close_redis_pool, quota_backend_ready
 from app.services.errors import (
-    LLMException, LLMConfigError, LLMTimeoutError, LLMUpstreamError, LLMBusyError,
+    LLMException, LLMConfigError, LLMTimeoutError, LLMBusyError,
     TTSException, TTSConfigError, TTSTimeoutError, TTSUpstreamError, TTSBusyError,
     StorageFullError,
     AudioUnavailable, TTSFlowUnsupportedError, TTSNotFoundError,
@@ -103,8 +103,6 @@ async def llm_failure(request, exc):
         code, detail = 503, "AI 讲解服务繁忙，请稍后重试。"
     elif isinstance(exc, LLMTimeoutError):
         code, detail = 504, "AI 讲解服务请求超时，请稍后重试。"
-    elif isinstance(exc, LLMUpstreamError):
-        code = 502
     logger.warning(
         "request_id=%s llm_error path=%s type=%s upstream_status=%s",
         getattr(request.state, "request_id", "-"), request.url.path,
@@ -174,7 +172,7 @@ async def health_check():
 
 @app.get("/ready", summary="Readiness check endpoint", tags=["system"])
 async def readiness_check():
-    ready = bool(get_catalog()) and await quota_backend_ready()
+    ready = bool(catalog()) and await quota_backend_ready()
     return JSONResponse(
         {"status": "ready" if ready else "unavailable"},
         status_code=200 if ready else 503,
@@ -191,6 +189,16 @@ app.include_router(articles_router)
 # Mount frontend static files
 class FrontendFiles(StaticFiles):
     async def get_response(self, path: str, scope):
+        nonce = scope.get("state", {}).get("editor_style_nonce")
+        if nonce and path in (".", "", "index.html"):
+            # Per-page style nonce must match CSP even on a conditional reload.
+            content = await run_in_threadpool(
+                (Path(self.directory) / "index.html").read_text, encoding="utf-8"
+            )
+            return HTMLResponse(
+                content.replace("__EDITOR_STYLE_NONCE__", nonce),
+                headers={"Cache-Control": "no-store"},
+            )
         response = await super().get_response(path, scope)
         # Unversioned ES module imports must revalidate along with index.html.
         # Keep ETag/304 support while preventing mixed old/new frontend files.

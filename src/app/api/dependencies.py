@@ -25,20 +25,26 @@ async def require_tts_identity(
     x_auth_proxy_secret: Annotated[str | None, Header(alias="X-Auth-Proxy-Secret", max_length=256)] = None,
     request: Request = None,
 ) -> str:
+    # Private mode never falls back to a browser-supplied client identifier,
+    # even in development. Tests use the same proxy contract as production.
+    return await _resolve_identity(request, x_client_id, x_authenticated_user, x_auth_proxy_secret,
+                                   browser_mode=settings.TTS_STORAGE_MODE == "legacy")
+
+
+async def _resolve_identity(
+    request: Request | None, client_id: str | None, user: str | None, secret: str | None,
+    *, browser_mode: bool, missing_auth_detail: str = "需要登录后才能访问个人数据。",
+) -> str:
     from app.services import auth_service as auth
 
-    if settings.ACCOUNT_AUTH_REQUIRED or (
-        settings.TTS_STORAGE_MODE == "legacy" and request is not None and auth.has_credentials(request)
-    ):
+    if settings.ACCOUNT_AUTH_REQUIRED or (browser_mode and request is not None and auth.has_credentials(request)):
         if request is None:
             raise HTTPException(401, "需要登录后才能继续。")
         context = await run_in_threadpool(auth.authenticate, request)
         return auth.account_owner(context.user)
-    if settings.TTS_STORAGE_MODE == "legacy":
-        return await require_client_id(x_client_id)
-    # Private mode never falls back to a browser-supplied client identifier,
-    # even in development. Tests use the same proxy contract as production.
-    return trusted_identity(x_authenticated_user, x_auth_proxy_secret)
+    if browser_mode:
+        return await require_client_id(client_id)
+    return trusted_identity(user, secret, missing_auth_detail=missing_auth_detail)
 
 
 def trusted_identity(
@@ -72,20 +78,9 @@ async def require_copilot_identity(
     The edge proxy must strip both identity headers from incoming traffic and inject
     them only on the private hop to this application.
     """
-    from app.services import auth_service as auth
-
-    if settings.ACCOUNT_AUTH_REQUIRED or (
-        settings.COPILOT_AUTH_MODE == "development" and request is not None and auth.has_credentials(request)
-    ):
-        if request is None:
-            raise HTTPException(401, "需要登录后才能继续。")
-        context = await run_in_threadpool(auth.authenticate, request)
-        return auth.account_owner(context.user)
-    if settings.COPILOT_AUTH_MODE == "development":
-        return await require_client_id(x_client_id)
-    return trusted_identity(
-        x_authenticated_user,
-        x_auth_proxy_secret,
+    return await _resolve_identity(
+        request, x_client_id, x_authenticated_user, x_auth_proxy_secret,
+        browser_mode=settings.COPILOT_AUTH_MODE == "development",
         missing_auth_detail="需要登录后才能使用 AI 讲解。",
     )
 

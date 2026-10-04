@@ -3,8 +3,8 @@ import sqlite3
 import time
 
 from app.services.auth_service import AuthError, digest
-from app.services.auth_storage import account_connection
-from app.services.history_service import utc_timestamp
+from app.services.database import connection as account_connection
+from app.services.timestamps import utc_timestamp
 from app.services.passwords import hash_password, verify_password
 from app.services.user_service import User, user_from_row
 from app.config import settings

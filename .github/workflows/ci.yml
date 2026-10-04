@@ -50,6 +50,12 @@ jobs:
         with:
           node-version: 22
 
+      - name: Verify reproducible local editor bundle
+        run: |
+          npm ci
+          npm run build:editor
+          git diff --exit-code -- frontend/vendor
+
       - name: Check JavaScript syntax
         run: |
           node scripts/test_frontend_syntax.cjs
@@ -64,6 +70,10 @@ jobs:
           node scripts/test_async_state.cjs
           node scripts/test_chat.cjs
           node scripts/test_accounts.cjs
+          node scripts/test_articles_state.cjs
+          node scripts/test_article_markdown.cjs
+          node scripts/test_article_editor.cjs
+          node scripts/test_articles_workbench.cjs
 
   docker:
     name: Docker build

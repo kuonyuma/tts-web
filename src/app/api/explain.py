@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
@@ -24,8 +24,10 @@ from app.services.explain_service import (
     reserve_storage_slot,
     resolve_selection,
     save_explanation,
+    delete_explanation,
+    clear_explanations,
 )
-from app.services.llm.gateway import get_catalog
+from app.services.llm.registry import catalog
 from app.services.llm.quota import copilot_distributed_lock, reserve_copilot_quota
 from app.services.runtime import cache_lock, llm_request_deadline
 from app.validation import validate_text
@@ -51,7 +53,7 @@ def _response(key: str, stored: dict, cached: bool) -> ExplainResponse:
 async def copilot_models(_identity: str = Depends(require_copilot_identity)):
     """Expose only configured products and public capability metadata."""
     return {
-        "models": get_catalog(),
+        "models": catalog(),
         "request_timeout_seconds": settings.LLM_TIMEOUT_SECONDS,
     }
 
@@ -65,7 +67,8 @@ async def explain_sentence(
         profile, mode = resolve_selection(request.model_id, request.mode_id)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
-    key = build_explain_key(request.text, request.lang, profile.id, mode.id, context_id=request.context_id)
+    selection = (profile, mode)
+    key = build_explain_key(request.text, request.lang, context_id=request.context_id, selection=selection)
     async with (
         llm_request_deadline(),
         cache_lock(f"explain:{x_client_id}:{key}"),
@@ -89,7 +92,7 @@ async def explain_sentence(
         try:
             await reserve_copilot_quota(x_client_id, mode.quota_weight)
             result, model_id, mode_id, revision = await generate_explanation_text(
-                text=request.text, lang=request.lang, model_id=profile.id, mode_id=mode.id,
+                text=request.text, lang=request.lang, model_id=profile.id, mode_id=mode.id, selection=selection,
             )
             await run_in_threadpool(
                 save_explanation,
@@ -136,7 +139,7 @@ async def fetch_explanation(
         profile, mode = resolve_selection(model_id, mode_id)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
-    key = build_explain_key(text, lang, profile.id, mode.id, context_id=context_id)
+    key = build_explain_key(text, lang, context_id=context_id, selection=(profile, mode))
     stored = await run_in_threadpool(get_explanation, x_client_id, key)
     if stored is None:
         raise HTTPException(404, "该句子的讲解存档不存在。")
@@ -183,6 +186,7 @@ async def chat_about_sentence(
             new_message=request.message,
             model_id=stored["model_id"],
             mode_id=mode.id,
+            selection=(profile, mode),
         )
         await run_in_threadpool(
             record_usage, x_client_id, result.provider, model_id, mode_id, mode.quota_weight, result.usage
@@ -199,3 +203,31 @@ async def chat_about_sentence(
             model_id=model_id,
             mode_id=mode_id,
         )
+
+@router.delete(
+    "/explain/{explain_key}",
+    summary="Delete an explanation for current client",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_explanation(
+    explain_key: str = Path(min_length=1, max_length=64),
+    x_client_id: str = Depends(require_copilot_identity),
+):
+    deleted = await run_in_threadpool(delete_explanation, x_client_id, explain_key)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="讲解不存在或无权删除。",
+        )
+
+
+@router.delete(
+    "/explain",
+    summary="Clear all explanations for current client",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def clear_all_explanations(
+    x_client_id: str = Depends(require_copilot_identity),
+):
+    await run_in_threadpool(clear_explanations, x_client_id)
+
