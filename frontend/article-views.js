@@ -1,6 +1,6 @@
 import { escapeHtml } from './api.js';
 import { renderArticleBlocks } from './article-markdown.js';
-import { ArticleLiveEditor } from './article-live-editor.js';
+import { ArticleEditor } from './article-editor.js';
 
 const statusNames = { pending: '等待保存', saving: '保存中…', saved: '已保存', error: '保存失败', conflict: '版本冲突 · 草稿已保留' };
 const dateLabel = value => new Date(value).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' });
@@ -117,7 +117,9 @@ export class ArticleViews {
       readScroll: Number(savedView?.readScroll) || 0,
       editScroll: Number(savedView?.editScroll) || legacyScroll,
       liveScroll: Number(savedView?.liveScroll) || 0,
-      liveCursor: savedView?.liveCursor || { start: 0, end: 0 },
+      liveAnchor: savedView?.liveAnchor || null,
+      editAnchor: savedView?.editAnchor || null,
+      selection: savedView?.selection || { anchor: savedView?.liveCursor?.start || 0, head: savedView?.liveCursor?.end || 0 },
       renderedText: null,
     };
     node.innerHTML = `<div class="article-editor-toolbar"><button class="article-back">‹ 文章库</button><div class="article-editor-actions"><button class="article-rename">重命名</button><button class="article-delete">删除</button></div></div>
@@ -126,14 +128,12 @@ export class ArticleViews {
       <div class="article-save-error" role="alert" hidden><p></p><button class="article-retry">重试保存</button></div>
       <div class="article-conflict" hidden><p>服务器已有更新。当前编辑区保留你的草稿；选择后才会继续保存。</p><details><summary>查看服务器版本</summary><strong class="article-server-title"></strong><pre class="article-server-content"></pre></details><div><button class="article-use-server">使用服务器版本</button><button class="article-keep-draft">保留本地并保存</button></div></div>
       <div class="article-mode-switch" role="group" aria-label="文章视图"><button class="article-mode-read" type="button">阅读</button><button class="article-mode-live" type="button">实时预览</button><button class="article-mode-edit" type="button">编辑源码</button></div>
-      <label class="sr-only" for="body-${entry.id}">文章正文，选中文字可填入语音输入</label><textarea id="body-${entry.id}" class="article-body" spellcheck="false" placeholder="粘贴或写下文章原文…"></textarea>
-      <div class="article-live" tabindex="0" aria-label="文章实时预览，点击段落编辑源码"></div>
+      <div id="body-${entry.id}" class="article-body article-code-editor" aria-label="文章 Markdown 编辑器"></div>
       <div class="article-preview" tabindex="0" role="document" aria-label="文章阅读正文"></div>
       <div class="article-selection-bar"><button class="article-fill" disabled>选中文字 → 语音输入</button><small>填入后，由你点击发送</small></div>`;
     const title = node.querySelector('.article-title-input');
-    const body = node.querySelector('.article-body');
-    title.value = entry.title; body.value = entry.content;
-    for (const [input, field] of [[title, 'title'], [body, 'content']]) {
+    title.value = entry.title;
+    for (const [input, field] of [[title, 'title']]) {
       input.addEventListener('compositionstart', () => this.state.edit(entry.id, { [field]: input.value }, true));
       input.addEventListener('input', event => this.state.edit(entry.id, { [field]: input.value }, event.isComposing));
       input.addEventListener('compositionend', () => this.state.edit(entry.id, { [field]: input.value }));
@@ -151,12 +151,15 @@ export class ArticleViews {
     });
     const fill = node.querySelector('.article-fill');
     const updateSelection = () => { fill.disabled = !this.selectedText(node); };
-    node.liveEditor = new ArticleLiveEditor(node.querySelector('.article-live'), {
+    node.articleEditor = new ArticleEditor(node.querySelector('.article-code-editor'), {
+      content: entry.content, selection: node.articleView.selection,
       onInput: (content, composing) => this.state.edit(entry.id, { content }, composing),
-      onSelection: updateSelection,
+      onSelection: () => {
+        updateSelection();
+        this.captureViewState(entry.id); this.onViewChange();
+      },
+      onScroll: () => { this.captureViewState(entry.id); this.onViewChange(); },
     });
-    node.liveEditor.cursor = node.articleView.liveCursor;
-    for (const event of ['select', 'keyup', 'mouseup', 'input', 'touchend']) body.addEventListener(event, updateSelection);
     fill.addEventListener('pointerdown', event => event.preventDefault());
     fill.addEventListener('click', () => {
       const text = this.selectedText(node);
@@ -164,7 +167,7 @@ export class ArticleViews {
       this.fillInput(text);
     });
     this.nodes.set(entry.id, node); this.editors.appendChild(node);
-    for (const viewport of node.querySelectorAll('.article-body, .article-preview')) {
+    for (const viewport of node.querySelectorAll('.article-preview')) {
       viewport.addEventListener('scroll', () => { this.captureViewState(entry.id); this.onViewChange(); }, { passive: true });
     }
     this.applyMode(node);
@@ -173,10 +176,8 @@ export class ArticleViews {
   }
   selectedText(node) {
     if (node.hidden) return '';
-    const body = node.querySelector('.article-body');
-    if (node.articleView.mode === 'live') return node.liveEditor.selectedText();
-    if (node.articleView.mode === 'edit') return body.value.slice(body.selectionStart, body.selectionEnd);
-    const preview = node.querySelector('.article-preview:not(.article-live)');
+    if (node.articleView.mode !== 'read') return node.articleEditor.selectedText();
+    const preview = node.querySelector('.article-preview');
     const selection = window.getSelection();
     if (!selection?.rangeCount || selection.isCollapsed) return '';
     const range = selection.getRangeAt(0);
@@ -191,30 +192,27 @@ export class ArticleViews {
     const view = node.articleView;
     if (!node.hidden) {
       const viewport = this.viewport(node);
-      view[`${view.mode}Scroll`] = viewport.scrollTop;
-      node.liveEditor.rememberCursor(); view.liveCursor = node.liveEditor.cursor;
+      if (!node.articleEditor.restoring || view.mode === 'read') view[`${view.mode}Scroll`] = viewport.scrollTop;
+      view.selection = node.articleEditor.selection;
+      if (view.mode !== 'read' && !node.articleEditor.restoring) view[`${view.mode}Anchor`] = node.articleEditor.anchor(false);
     }
     return { mode: view.mode, readScroll: view.readScroll, editScroll: view.editScroll,
-      liveScroll: view.liveScroll, liveCursor: view.liveCursor };
+      liveScroll: view.liveScroll, liveAnchor: view.liveAnchor, editAnchor: view.editAnchor, selection: view.selection };
   }
   viewport(node) {
-    return node.querySelector(node.articleView.mode === 'edit' ? '.article-body'
-      : node.articleView.mode === 'live' ? '.article-live' : '.article-preview:not(.article-live)');
+    return node.articleView.mode === 'read' ? node.querySelector('.article-preview') : node.articleEditor.scrollDOM;
   }
   restoreScroll(id, resume = false) {
     const node = this.nodes.get(id);
     if (!node || node.hidden) return;
     const view = node.articleView;
-    if (view.mode === 'live') {
-      if (resume) node.liveEditor.activate(view.liveCursor.start, view.liveCursor);
-      node.liveEditor.fit();
-    }
-    this.viewport(node).scrollTop = view[`${view.mode}Scroll`];
+    if (view.mode === 'read') this.viewport(node).scrollTop = view.readScroll;
+    else if (resume) node.articleEditor.restoreScroll(view[`${view.mode}Scroll`], view[`${view.mode}Anchor`]);
   }
   renderPreview(node) {
     const entry = this.state.entries.get(node.id.slice('article-panel-'.length));
     if (!entry || node.articleView.renderedText === entry.content) return;
-    node.querySelector('.article-preview:not(.article-live)').innerHTML = entry.content
+    node.querySelector('.article-preview').innerHTML = entry.content
       ? renderArticleBlocks(entry.content).map(block => `<div class="article-reading-block" data-source-start="${block.start}" data-source-end="${block.end}">${block.html}</div>`).join('')
       : '<p class="article-reading-empty">还没有正文，点击“实时预览”开始写作。</p>';
     node.articleView.renderedText = entry.content;
@@ -223,54 +221,34 @@ export class ArticleViews {
   applyMode(node) {
     const reading = node.articleView.mode === 'read';
     const live = node.articleView.mode === 'live';
-    node.querySelector('.article-body').hidden = reading || live;
-    node.querySelector('.article-live').hidden = !live;
-    node.querySelector('.article-preview:not(.article-live)').hidden = !reading;
+    node.querySelector('.article-body').hidden = reading;
+    node.querySelector('.article-preview').hidden = !reading;
     node.querySelector('.article-mode-read').setAttribute('aria-pressed', String(reading));
     node.querySelector('.article-mode-live').setAttribute('aria-pressed', String(live));
     node.querySelector('.article-mode-edit').setAttribute('aria-pressed', String(!reading && !live));
-    if (live) {
-      node.liveEditor.setContent(this.state.entries.get(node.id.slice('article-panel-'.length)).content);
-      node.liveEditor.activate(node.liveEditor.cursor.start, node.liveEditor.cursor);
-    }
+    node.articleEditor.setMode(live ? 'live' : 'edit');
     if (reading) this.renderPreview(node);
   }
   setMode(id, mode) {
     const node = this.nodes.get(id);
     if (!node || node.articleView.mode === mode) return;
-    if (node.liveEditor.composing || this.state.entries.get(id)?.composing) return;
+    if (node.articleEditor.composing || this.state.entries.get(id)?.composing) return;
     this.captureViewState(id);
     const previous = node.articleView.mode;
-    const anchor = previous === 'edit' ? this.sourceAnchor(node) : this.documentAnchor(node, mode === 'live');
-    node.liveEditor.commit();
+    const anchor = previous === 'read' ? this.documentAnchor(node) : node.articleEditor.anchor();
     node.articleView.mode = mode;
-    this.applyMode(node); this.restoreScroll(id);
-    if (mode !== 'edit' && anchor) {
-      if (mode === 'live') {
-        const cursor = node.articleView.liveCursor;
-        const block = node.liveEditor.blocks.find(part => part.start <= anchor.offset && anchor.offset <= part.end);
-        const selection = block && cursor.start >= block.start && cursor.end <= block.end ? cursor
-          : { start: anchor.offset, end: anchor.offset };
-        node.liveEditor.activate(anchor.offset, selection);
-      }
+    this.applyMode(node);
+    if (mode === 'read') {
+      this.restoreScroll(id);
       this.restoreDocumentAnchor(node, anchor);
-    }
+    } else if (previous === 'read') {
+      node.articleEditor.restoreScroll(node.articleView[`${mode}Scroll`], node.articleView[`${mode}Anchor`]);
+    } else node.articleEditor.restoreAnchor(anchor);
     this.captureViewState(id); this.updateSelections(); this.onViewChange();
   }
-  documentAnchor(node, preferCursor = false) {
+  documentAnchor(node) {
     const viewport = this.viewport(node), top = viewport.getBoundingClientRect().top + viewport.clientTop;
-    if (node.articleView.mode === 'live' && node.liveEditor.active) {
-      const active = node.liveEditor.active;
-      return { offset: active.start, top: Math.max(0, Math.min(viewport.clientHeight - 60, active.node.getBoundingClientRect().top - top)) };
-    }
     const blocks = [...viewport.querySelectorAll('[data-source-start]')];
-    if (preferCursor) {
-      const cursor = node.articleView.liveCursor.start;
-      const current = blocks.find(part => Number(part.dataset.sourceStart) <= cursor && Number(part.dataset.sourceEnd) >= cursor);
-      if (current && current.getBoundingClientRect().bottom > top && current.getBoundingClientRect().top < top + viewport.clientHeight) {
-        return { offset: Number(current.dataset.sourceStart), top: current.getBoundingClientRect().top - top };
-      }
-    }
     const block = blocks.find(part => part.getBoundingClientRect().bottom > top + 1) || blocks.at(-1);
     return block ? { offset: Number(block.dataset.sourceStart), top: block.getBoundingClientRect().top - top } : null;
   }
@@ -279,41 +257,34 @@ export class ArticleViews {
     const block = blocks.find(part => Number(part.dataset.sourceEnd) >= anchor.offset) || blocks.at(-1);
     if (block) viewport.scrollTop += block.getBoundingClientRect().top - viewport.getBoundingClientRect().top - viewport.clientTop - anchor.top;
   }
-  sourceAnchor(node) {
-    const body = node.querySelector('.article-body'), parts = renderArticleBlocks(body.value);
-    if (!parts.length) return null;
-    const mirror = document.createElement('div'), style = getComputedStyle(body);
-    for (const key of ['font', 'lineHeight', 'letterSpacing', 'padding', 'whiteSpace', 'overflowWrap', 'wordBreak', 'tabSize']) mirror.style[key] = style[key];
-    Object.assign(mirror.style, { position: 'absolute', visibility: 'hidden', pointerEvents: 'none',
-      width: `${body.clientWidth}px`, boxSizing: 'border-box', top: '0', left: '0' });
-    let cursor = 0;
-    mirror.innerHTML = parts.map(part => {
-      const html = escapeHtml(body.value.slice(cursor, part.start)) + `<span data-source-start="${part.start}"></span>`;
-      cursor = part.start; return html;
-    }).join('') + escapeHtml(body.value.slice(cursor));
-    document.body.appendChild(mirror);
-    const markers = [...mirror.querySelectorAll('span')];
-    const marker = markers.find((part, index) => !markers[index + 1] || markers[index + 1].offsetTop > body.scrollTop) || markers[0];
-    const anchor = { offset: Number(marker.dataset.sourceStart), top: marker.offsetTop - body.scrollTop };
-    mirror.remove(); return anchor;
-  }
   update(entry) {
+    if (entry.status === 'saved' && !entry.dirty) {
+      // Keep acknowledged summaries after a new article stops being a draft,
+      // and after closing releases its editing state from ArticleState.
+      const index = this.rows.findIndex(row => row.id === entry.id);
+      const query = this.library.querySelector('#articleSearch').value.toLocaleLowerCase();
+      if (index >= 0 || `${entry.title}\n${entry.content}`.toLocaleLowerCase().includes(query)) {
+        const row = { id: entry.id, title: entry.title, character_count: Array.from(entry.content).length,
+          created_at: entry.created_at, updated_at: entry.updated_at, revision: entry.revision };
+        if (index >= 0) this.rows[index] = row;
+        else this.rows.unshift(row);
+      }
+    }
     if (entry.removed) {
       this.searchVersion++;
-      this.nodes.get(entry.id)?.liveEditor.dispose();
+      this.nodes.get(entry.id)?.articleEditor.dispose();
       this.nodes.get(entry.id)?.remove(); this.nodes.delete(entry.id);
       this.rows = this.rows.filter(row => row.id !== entry.id); this.renderRows(); return;
     }
     const node = this.nodes.get(entry.id);
     if (node) {
       // Do not replace editor DOM or assign equal values: selection and scroll must survive saves.
-      const title = node.querySelector('.article-title-input'), body = node.querySelector('.article-body');
+      const title = node.querySelector('.article-title-input');
       if (title.value !== entry.title) title.value = entry.title;
-      if (body.value !== entry.content) body.value = entry.content;
-      node.liveEditor.setContent(entry.content);
+      node.articleEditor.setContent(entry.content);
       if (node.articleView.mode === 'read') this.renderPreview(node);
-      title.disabled = body.disabled = entry.deleting;
-      node.liveEditor.setDisabled(entry.deleting);
+      title.disabled = entry.deleting;
+      node.articleEditor.setDisabled(entry.deleting);
       const status = node.querySelector('.article-save-state');
       status.textContent = entry.deleting ? '正在删除…' : entry.composing ? '输入中 · 草稿已保护' : statusNames[entry.status];
       status.dataset.status = entry.status;
@@ -335,7 +306,7 @@ export class ArticleViews {
   }
   dispose() {
     clearTimeout(this.searchTimer); document.removeEventListener('selectionchange', this.selectionChanged);
-    for (const node of this.nodes.values()) node.liveEditor.dispose();
+    for (const node of this.nodes.values()) node.articleEditor.dispose();
     this.nodes.clear(); this.editors.replaceChildren(); this.library.replaceChildren();
   }
 }

@@ -1,157 +1,13 @@
-import sqlite3
 import logging
-import threading
-import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.config import settings
+from app.services import database
 from app.services.errors import StorageFullError
-from app.services.user_migrations import migrate_users
-from app.services.article_migrations import migrate_articles
+from app.services.timestamps import absolute_history_row, utc_timestamp
 from app.validation import normalize_client_id
-from pathlib import Path
-from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
-
-DB_PATH = Path(__file__).resolve().parent.parent / "cache" / "history.db"
-
-
-_initialized = False
-_init_lock = threading.Lock()
-
-
-def history_timestamp(value: str) -> str:
-    """Old naive SQLite dates are server local time, never implicitly UTC."""
-    parsed = datetime.fromisoformat(value)
-    if parsed.tzinfo is None:
-        parsed = parsed.astimezone()
-    return parsed.isoformat()
-
-
-def utc_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
-
-
-def absolute_history_row(row: sqlite3.Row) -> dict:
-    result = dict(row)
-    for field in ("created_at", "last_played_at"):
-        result[field] = history_timestamp(result[field])
-    return result
-
-
-def _run_with_retry(fn, max_retries: int = 2):
-    attempts = 0
-    while True:
-        try:
-            return fn()
-        except sqlite3.OperationalError as exc:
-            msg = str(exc).lower()
-            if ("locked" in msg or "busy" in msg) and attempts < max_retries:
-                attempts += 1
-                time.sleep(0.05 * (2 ** attempts))
-                continue
-            raise
-
-
-def connect_database() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH), timeout=settings.DB_BUSY_TIMEOUT_SECONDS)
-    conn.row_factory = sqlite3.Row
-    try:
-        page_size = conn.execute("pragma page_size").fetchone()[0]
-        conn.execute(f"pragma max_page_count={max(1, settings.DB_MAX_BYTES // page_size)}")
-        conn.execute("pragma journal_size_limit=1048576")
-        return conn
-    except BaseException:
-        conn.close()
-        raise
-
-
-def init_db() -> None:
-    with _init_lock:
-        if not _initialized:
-            _initialize_db()
-
-
-def _initialize_db() -> None:
-    """Create the history table if it doesn't exist and run migrations."""
-    global _initialized
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = connect_database()
-    try:
-        conn.execute("pragma journal_mode=wal")
-        conn.execute("begin immediate")
-        migrate_users(conn)
-        migrate_articles(conn)
-        cursor = conn.execute("select name from sqlite_master where type='table' and name='history'")
-        table_exists = cursor.fetchone() is not None
-
-        if not table_exists:
-            conn.execute("""
-                create table history (
-                    id             integer primary key autoincrement,
-                    client_id      text    not null default 'default',
-                    text           text    not null,
-                    voice          text    not null,
-                    model          text    not null,
-                    engine         text    not null default 'edge',
-                    cache_key      text    not null,
-                    created_at     text    not null default (strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')),
-                    last_played_at text    not null default (strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')),
-                    unique(client_id, cache_key)
-                )
-            """)
-            conn.execute("create index if not exists idx_history_client on history(client_id, last_played_at desc)")
-            conn.commit()
-        else:
-            cursor = conn.execute("pragma table_info(history)")
-            columns = [row["name"] for row in cursor.fetchall()]
-            if "client_id" not in columns:
-                # Migrate to new schema with client_id and compound unique(client_id, cache_key)
-                conn.execute("""
-                    create table history_migration (
-                        id             integer primary key autoincrement,
-                        client_id      text    not null default 'default',
-                        text           text    not null,
-                        voice          text    not null,
-                        model          text    not null,
-                        engine         text    not null default 'edge',
-                        cache_key      text    not null,
-                        created_at     text    not null default (strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')),
-                        last_played_at text    not null default (strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')),
-                        unique(client_id, cache_key)
-                    )
-                """)
-                engine_col = "engine" if "engine" in columns else "'edge' as engine"
-                conn.execute(f"""
-                    insert into history_migration (id, client_id, text, voice, model, engine, cache_key, created_at, last_played_at)
-                    select id, 'default' as client_id, text, voice, model, {engine_col}, cache_key, created_at, last_played_at from history
-                """)
-                conn.execute("drop table history")
-                conn.execute("alter table history_migration rename to history")
-                conn.execute("create index if not exists idx_history_client on history(client_id, last_played_at desc)")
-                conn.commit()
-            else:
-                if "engine" not in columns:
-                    conn.execute("alter table history add column engine text not null default 'gemini'")
-                conn.execute("create index if not exists idx_history_client on history(client_id, last_played_at desc)")
-                conn.commit()
-        _initialized = True
-    finally:
-        conn.close()
-    logger.info("History database initialized at %s", DB_PATH)
-
-
-@contextmanager
-def _get_conn():
-    """Context manager for SQLite connections with Row factory."""
-    if not _initialized:
-        init_db()
-    conn = connect_database()
-    try:
-        yield conn
-    finally:
-        conn.close()
 
 
 def add_or_touch(client_id: str, text: str, voice: str, model: str, engine: str, cache_key: str) -> None:
@@ -159,7 +15,7 @@ def add_or_touch(client_id: str, text: str, voice: str, model: str, engine: str,
     cid = normalize_client_id(client_id)
 
     def _do_write():
-        with _get_conn() as conn:
+        with database.connection(foreign_keys=False) as conn:
             conn.execute("begin immediate")
             now = utc_timestamp()
             cursor = conn.execute(
@@ -177,53 +33,47 @@ def add_or_touch(client_id: str, text: str, voice: str, model: str, engine: str,
                     "values (?, ?, ?, ?, ?, ?, ?, ?)",
                     (cid, text, voice, model, engine, cache_key, now, now)
                 )
-            conn.commit()
 
-    _run_with_retry(_do_write)
+    database.run_with_retry(_do_write)
 
 
 def touch(client_id: str, cache_key: str) -> None:
     """Update last_played_at for an existing client history record."""
     cid = normalize_client_id(client_id)
-    with _get_conn() as conn:
+    with database.connection(foreign_keys=False) as conn:
         conn.execute(
             "update history set last_played_at = ? where client_id = ? and cache_key = ?",
             (utc_timestamp(), cid, cache_key)
         )
-        conn.commit()
 
 
 def list_history(client_id: str, limit: int = 50) -> list[dict]:
     """Return history records for a client ordered by last_played_at descending."""
     cid = normalize_client_id(client_id)
-    with _get_conn() as conn:
+    with database.connection(foreign_keys=False) as conn:
         rows = conn.execute(
             "select id, text, voice, model, engine, cache_key, created_at, last_played_at "
-            "from history where client_id = ?",
-            (cid,)
+            "from history where client_id = ? "
+            "order by strftime('%Y-%m-%d %H:%M:%f', last_played_at) desc, id desc limit ?",
+            (cid, limit),
         ).fetchall()
-        records = [absolute_history_row(row) for row in rows]
-        # Mixed historical local dates and new UTC dates must sort by the instant.
-        records.sort(key=lambda row: datetime.fromisoformat(row["last_played_at"]).timestamp(), reverse=True)
-        return records[:limit]
+        return [absolute_history_row(row) for row in rows]
 
 
 def delete_history(client_id: str, history_id: int) -> bool:
     """Delete a client's history record. Returns True if deleted, False otherwise."""
     cid = normalize_client_id(client_id)
-    with _get_conn() as conn:
+    with database.connection(foreign_keys=False) as conn:
         cursor = conn.execute(
             "delete from history where id = ? and client_id = ?",
             (history_id, cid)
         )
-        conn.commit()
         return cursor.rowcount > 0
 
 
 def clear_all_history(client_id: str) -> int:
     """Delete all history records for a client. Returns count of deleted records."""
     cid = normalize_client_id(client_id)
-    with _get_conn() as conn:
+    with database.connection(foreign_keys=False) as conn:
         cursor = conn.execute("delete from history where client_id = ?", (cid,))
-        conn.commit()
         return cursor.rowcount

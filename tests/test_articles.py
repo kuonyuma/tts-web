@@ -1,3 +1,5 @@
+from app.services import database as database_service
+import time
 from uuid import uuid4
 import json
 
@@ -50,6 +52,19 @@ def test_articles_crud_search_and_long_text():
     assert client.get(path).status_code == 404
     assert client.get('/api/articles').json() == []
     assert client.put(path, json={'title': 'late', 'content': 'late', 'revision': 2}).status_code == 404
+
+
+def test_article_database_keeps_markdown_source_and_original_newlines():
+    client, _ = account('markdown_reader')
+    source = '# 标题\r\n\r\n**hello**\n\n[链接](https://example.com)'
+    article = create(client, content=source).json()
+    path = '/api/articles/' + article['id']
+    assert client.get(path).json()['content'] == source
+    updated = client.put(path, json={'title': '原文', 'content': '**hello**', 'revision': 1})
+    assert updated.status_code == 200
+    with database_service.connect_database() as conn:
+        stored = conn.execute('select content from articles where id=?', (article['id'],)).fetchone()[0]
+    assert stored == '**hello**'
 
 
 def test_articles_account_isolation_and_expected_identity():
@@ -120,11 +135,50 @@ def test_delete_before_create_arrives_keeps_tombstone():
 def test_article_migration_preserves_users_and_history():
     client, user_id = account('alice')
     db.add_or_touch('legacy', 'old text', 'voice', 'model', 'edge', 'a' * 64)
-    db._initialized = False
-    db.init_db()
-    db._initialized = False
-    db.init_db()
+    database_service._initialized = False
+    database_service.init_db()
+    database_service._initialized = False
+    database_service.init_db()
     assert client.get('/api/auth/me').json()['id'] == user_id
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         assert conn.execute('select text from history').fetchone()[0] == 'old text'
     assert create(client).status_code == 201
+
+def test_tombstone_inserted_without_duplicate_update():
+    from app.services.article_service import delete_article, ArticleError
+    client, user_id = account('alice_tombstone')
+    identifier = str(uuid4())
+    with pytest.raises(ArticleError) as exc_info:
+        delete_article(user_id, identifier)
+    assert exc_info.value.status_code == 404
+    with database_service.connect_database() as conn:
+        row = conn.execute("select revision, deleted, title, content from articles where id=?", (identifier,)).fetchone()
+        assert row["deleted"] == 1
+        assert row["revision"] == 1
+        assert row["title"] == ""
+        assert row["content"] == ""
+
+
+def test_article_tombstone_pruning():
+    from datetime import datetime, timezone
+    from app.services.article_service import prune_tombstones
+    client, user_id = account('alice_prune')
+    old_id = str(uuid4())
+    recent_id = str(uuid4())
+    client.delete('/api/articles/' + old_id)
+    client.delete('/api/articles/' + recent_id)
+
+    # Set old_id tombstone updated_at to 10 days ago
+    old_time = datetime.fromtimestamp(time.time() - 10 * 86400, timezone.utc).isoformat()
+    with database_service.connect_database() as conn:
+        conn.execute("update articles set updated_at=? where id=?", (old_time, old_id))
+        conn.commit()
+
+    # Pruning older than 7 days removes old_id but keeps recent_id
+    pruned = prune_tombstones(older_than_seconds=7 * 86400)
+    assert pruned == 1
+
+    with database_service.connect_database() as conn:
+        assert conn.execute("select count(*) from articles where id=?", (old_id,)).fetchone()[0] == 0
+        assert conn.execute("select count(*) from articles where id=?", (recent_id,)).fetchone()[0] == 1
+

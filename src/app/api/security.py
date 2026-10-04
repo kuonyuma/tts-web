@@ -1,3 +1,5 @@
+import secrets
+
 from app.config import settings
 
 
@@ -11,6 +13,11 @@ class SecurityHeaders:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
 
+        nonce = secrets.token_urlsafe(24) if scope["path"] in ("/", "/index.html") else ""
+        if nonce:
+            scope.setdefault("state", {})["editor_style_nonce"] = nonce
+        style_policy = "style-src 'self'" + (f" 'nonce-{nonce}'" if nonce else "") + "; "
+
         async def send_hardened(message):
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
@@ -22,7 +29,7 @@ class SecurityHeaders:
                     (
                         b"content-security-policy",
                         b"default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; "
-                        b"form-action 'self'; script-src 'self'; style-src 'self'; "
+                        b"form-action 'self'; script-src 'self'; " + style_policy.encode("ascii") +
                         b"style-src-attr 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; "
                         b"connect-src 'self'; worker-src 'none'; manifest-src 'self'",
                     ),

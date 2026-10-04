@@ -79,15 +79,14 @@ def llm_provider_error(exc: Exception, provider: str) -> LLMException:
 
 
 class TTSUpstreamError(TTSException):
-    def __init__(self, status_code: int, detail: str = "Provider request failed"):
+    def __init__(self, status_code: int):
         super().__init__(f"Upstream TTS error {status_code}")
         self.status_code = status_code
-        self.detail = detail
 
 
 class TTSAudioTooLargeError(TTSUpstreamError):
     def __init__(self):
-        super().__init__(502, "Audio response too large")
+        super().__init__(502)
 
 
 def provider_error(exc: Exception, provider: str) -> TTSException:
@@ -109,4 +108,4 @@ def provider_error(exc: Exception, provider: str) -> TTSException:
         return TTSUpstreamError(code)
     if isinstance(exc, (httpx.TransportError, aiohttp.ClientError, OSError)) or type(exc).__name__ == "APIConnectionError":
         return TTSException("连接上游服务失败，请稍后重试。")
-    return TTSUpstreamError(502, "Invalid provider response")
+    return TTSUpstreamError(502)

@@ -3,7 +3,7 @@ from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.tts_service import (
+from app.services.errors import (
     TTSTimeoutError,
     TTSUpstreamError,
     TTSConfigError,
@@ -37,7 +37,7 @@ def test_static_files_served():
         assert client.get(f"/{asset}").status_code == 200
 
 
-@pytest.mark.parametrize("asset", ["/", "/app.js", "/settings.js", "/chat.css"])
+@pytest.mark.parametrize("asset", ["/app.js", "/settings.js", "/chat.css"])
 def test_frontend_assets_revalidate_after_an_update(asset):
     response = client.get(asset)
     assert response.status_code == 200
@@ -46,6 +46,21 @@ def test_frontend_assets_revalidate_after_an_update(asset):
     unchanged = client.get(asset, headers={"If-None-Match": response.headers["etag"]})
     assert unchanged.status_code == 304
     assert unchanged.headers["cache-control"] == "no-cache"
+
+
+def test_editor_styles_have_a_fresh_nonce_matching_the_document():
+    import re
+
+    first = client.get("/")
+    nonce = re.search(r'name="codemirror-style-nonce" content="([^"]+)"', first.text)
+    assert nonce, "CodeMirror styles need a nonce under the existing CSP"
+    assert f"'nonce-{nonce[1]}'" in first.headers["content-security-policy"]
+    assert first.headers["cache-control"] == "no-store"
+    second = client.get("/index.html", headers={"If-None-Match": first.headers.get("etag", "")})
+    assert second.status_code == 200
+    second_nonce = re.search(r'name="codemirror-style-nonce" content="([^"]+)"', second.text)
+    assert second_nonce and second_nonce[1] != nonce[1]
+    assert f"'nonce-{second_nonce[1]}'" in second.headers["content-security-policy"]
 
 
 def test_get_engines():
@@ -91,7 +106,7 @@ def test_tts_over_max_length():
 @patch("app.services.history_service.add_or_touch")
 @patch("app.services.cache_service.put_audio_cache")
 @patch("app.services.cache_service.get_cached_audio", return_value=None)
-@patch("app.services.tts_service.synthesize", new_callable=AsyncMock)
+@patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize", new_callable=AsyncMock)
 def test_tts_edge_success(mock_synthesize, mock_cache_get, mock_cache_put, mock_history):
     """Verify valid Edge TTS synthesis returns audio/mpeg binary stream"""
     fake_audio = b"fake-mp3-audio-data"
@@ -113,7 +128,6 @@ def test_tts_edge_success(mock_synthesize, mock_cache_get, mock_cache_put, mock_
     mock_synthesize.assert_awaited_once_with(
         text="今日はいい天気ですね。",
         voice="ja-JP-NanamiNeural",
-        engine="edge",
         api_key=None,
     )
     assert mock_history.call_count == 1
@@ -123,7 +137,7 @@ def test_tts_edge_success(mock_synthesize, mock_cache_get, mock_cache_put, mock_
 @patch("app.services.history_service.add_or_touch")
 @patch("app.services.cache_service.put_audio_cache")
 @patch("app.services.cache_service.get_cached_audio", return_value=None)
-@patch("app.services.tts_service.synthesize", new_callable=AsyncMock)
+@patch("app.services.engines.gemini_engine.GeminiTTSEngine.synthesize", new_callable=AsyncMock)
 def test_tts_gemini_byok_header(mock_synthesize, mock_cache_get, mock_cache_put, mock_history):
     """Verify X-Gemini-Api-Key and X-Client-ID headers are handled properly"""
     fake_audio = b"fake-gemini-mp3-audio"
@@ -144,14 +158,13 @@ def test_tts_gemini_byok_header(mock_synthesize, mock_cache_get, mock_cache_put,
     mock_synthesize.assert_awaited_once_with(
         text="こんにちは",
         voice="Kore",
-        engine="gemini",
         api_key="test-byok-key-123",
     )
     assert mock_history.call_count == 1
     assert mock_history.call_args[0][0] == "test-user-2"
 
 
-@patch("app.services.tts_service.synthesize", new_callable=AsyncMock)
+@patch("app.services.engines.gemini_engine.GeminiTTSEngine.synthesize", new_callable=AsyncMock)
 def test_tts_config_error(mock_synthesize):
     """Verify missing Gemini API Key results in 400 Bad Request with setup prompt"""
     mock_synthesize.side_effect = TTSConfigError("Gemini TTS 服务需要 API Key。")
@@ -161,7 +174,7 @@ def test_tts_config_error(mock_synthesize):
     assert "需要 API Key" in response.json()["detail"]
 
 
-@patch("app.services.tts_service.synthesize", new_callable=AsyncMock)
+@patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize", new_callable=AsyncMock)
 def test_tts_timeout_error(mock_synthesize):
     """Verify timeout results in 502 Bad Gateway"""
     mock_synthesize.side_effect = TTSTimeoutError("Timeout")
@@ -171,10 +184,10 @@ def test_tts_timeout_error(mock_synthesize):
     assert "超时" in response.json()["detail"]
 
 
-@patch("app.services.tts_service.synthesize", new_callable=AsyncMock)
+@patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize", new_callable=AsyncMock)
 def test_tts_upstream_error(mock_synthesize):
     """Verify upstream provider error results in 502 Bad Gateway"""
-    mock_synthesize.side_effect = TTSUpstreamError(500, "Gemini Error")
+    mock_synthesize.side_effect = TTSUpstreamError(500)
 
     response = client.post("/api/tts", json={"text": "こんにちは"})
     assert response.status_code == 502
@@ -198,7 +211,7 @@ def test_clear_all_history(mock_clear_history):
 
 def test_history_multi_client_isolation():
     """Verify end-to-end multi-tenant isolation between different clients"""
-    from app.services.history_service import add_or_touch, list_history
+    from app.services.history_service import add_or_touch
 
     client_a = "client_alpha"
     client_b = "client_beta"
@@ -249,7 +262,7 @@ def test_history_multi_client_isolation():
 @patch("app.services.history_service.add_or_touch")
 @patch("app.services.cache_service.put_flow_cache")
 @patch("app.services.cache_service.get_cached_flow", return_value=None)
-@patch("app.services.tts_service.synthesize_with_timeline", new_callable=AsyncMock)
+@patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize_with_timeline", new_callable=AsyncMock)
 def test_tts_flow_edge_success(mock_synthesize, mock_cache_get, mock_cache_put, mock_history):
     """Verify POST /api/tts/flow returns manifest JSON with sentences."""
     from app.services.engines.base import SentenceCue, TimedSynthesisResult

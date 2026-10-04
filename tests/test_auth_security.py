@@ -1,3 +1,4 @@
+from app.services import database as database_service
 from unittest.mock import AsyncMock, patch
 
 import jwt
@@ -6,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import app
-from app.services import auth_service as auth, history_service as db, private_tts_storage
+from app.services import auth_service as auth, private_tts_storage
 
 
 PASSWORD = "example-password"
@@ -42,7 +43,7 @@ def test_unsigned_tampered_and_expired_database_session_tokens_are_rejected():
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {unsigned}"}).status_code == 401
     wrong_key = jwt.encode(claims, "a" * 40, algorithm="HS256")
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {wrong_key}"}).status_code == 401
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         conn.execute("update auth_sessions set expires_at=0")
         conn.commit()
     assert client.get("/api/auth/me").status_code == 401
@@ -77,17 +78,17 @@ def test_reserved_account_identity_cannot_be_spoofed_anonymously():
 def test_account_private_audio_and_history_are_isolated(monkeypatch, tmp_path):
     alice, a, _ = registered("alice", "alice@example.com")
     bob, b, _ = registered("bobby", "bob@example.com")
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         conn.execute("update users set email_verified=1")
         conn.commit()
     monkeypatch.setattr(settings, "ACCOUNT_AUTH_REQUIRED", True)
     monkeypatch.setattr(settings, "TTS_STORAGE_MODE", "private")
-    store = private_tts_storage.PrivateTTSStore(db.DB_PATH, tmp_path / "private_audio")
+    store = private_tts_storage.PrivateTTSStore(database_service.DB_PATH, tmp_path / "private_audio")
     monkeypatch.setattr(private_tts_storage, "_store", store)
     from app.services.engines.base import TimedSynthesisResult, SentenceCue
 
     timed = TimedSynthesisResult(b"private audio", [SentenceCue("private text", 0, 100)])
-    with patch("app.services.tts_service.synthesize_with_timeline", new_callable=AsyncMock, return_value=timed):
+    with patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize_with_timeline", new_callable=AsyncMock, return_value=timed):
         response = alice.post("/api/tts", json={"text": "private text"}, headers={"X-CSRF-Token": alice.cookies["tts_csrf"]})
     assert response.status_code == 200
     key = response.headers["x-cache-key"]
@@ -129,7 +130,7 @@ def test_email_change_invalid_unicode_password_is_safe_422():
 
 def test_revoked_cookie_is_cleared_before_returning_to_anonymous_mode():
     client, _, _ = registered()
-    with db.connect_database() as conn:
+    with database_service.connect_database() as conn:
         conn.execute("delete from auth_sessions")
         conn.commit()
     assert client.get("/api/auth/me").status_code == 401

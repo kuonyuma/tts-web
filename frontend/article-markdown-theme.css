@@ -1,0 +1,24 @@
+/* Static application theme. CodeMirror's base styles use the per-page CSP nonce. */
+.article-code-editor { flex: 1; min-height: 100px; min-width: 0; overflow: hidden; border: 1px solid var(--chat-line); border-radius: 8px; background: var(--bg-card); color: var(--text-primary); }
+.article-code-editor .cm-editor { height: 100%; font: inherit; font-size: 14px; }
+.article-code-editor .cm-scroller { overflow: auto; font-family: inherit; line-height: 1.9; }
+.article-code-editor .cm-content { padding: 14px 0; caret-color: var(--text-primary); }
+.article-code-editor .cm-line { padding: 0 12px; overflow-wrap: anywhere; }
+.article-code-editor .cm-focused { outline: none; }
+.article-code-editor:focus-within { border-color: var(--chat-accent); }
+.article-code-editor .cm-placeholder { color: var(--chat-muted); }
+.article-code-editor[data-editor-mode="edit"] .cm-scroller { font-family: var(--font-mono, Consolas, monospace); }
+.article-code-editor .cm-md-strong { font-weight: 700; }
+.article-code-editor .cm-md-emphasis { font-style: italic; }
+.article-code-editor .cm-md-inline-code { font-family: var(--font-mono, Consolas, monospace); font-size: .92em; color: var(--chat-accent); background: var(--chat-tint); border-radius: 4px; }
+.article-code-editor .cm-md-marker { color: var(--chat-muted); }
+.article-code-editor .cm-md-heading { font-weight: 650; line-height: 1.65; }
+.article-code-editor .cm-md-h1 { font-size: 23px; }
+.article-code-editor .cm-md-h2 { font-size: 19px; }
+.article-code-editor .cm-md-h3 { font-size: 16px; }
+.article-code-editor :is(.cm-md-h4,.cm-md-h5,.cm-md-h6) { font-size: 14px; }
+.article-code-editor .cm-md-link { color: var(--chat-accent); text-decoration: underline; text-underline-offset: 3px; }
+.article-code-editor .cm-md-quote { border-left: 3px solid var(--chat-accent); background: var(--chat-tint); color: var(--text-secondary); }
+.article-code-editor .cm-md-list-marker { color: var(--chat-muted); }
+.article-code-editor .cm-md-rule-line { display: inline-block; width: 100%; height: 1px; background: var(--chat-line); vertical-align: middle; }
+.article-code-editor .cm-md-code-block { font-family: var(--font-mono, Consolas, monospace); background: var(--bg-subtle); line-height: 1.65; }

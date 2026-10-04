@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The FastAPI application lives in `src/app`. HTTP routes are grouped in `api/`, Pydantic request and response models in `schemas/`, and TTS, caching, and history logic in `services/`. Provider implementations belong in `src/app/services/engines/` and should implement the shared base interface. Backend tests are in `tests/`. The browser client is dependency-free and consists of `frontend/index.html`, `frontend/app.js`, and modular ES modules/CSS files in `frontend/`. Root-level Docker files support containerized runs; `README.md` and docs in `docs/` document usage and architecture.
+The FastAPI application lives in `src/app`. HTTP routes are grouped in `api/`, Pydantic request and response models in `schemas/`, and TTS, caching, and history logic in `services/`. Provider implementations belong in `src/app/services/engines/` and should implement the shared base interface. Backend tests are in `tests/`. The browser client consists of `frontend/index.html`, `frontend/app.js`, and modular ES modules/CSS files in `frontend/`, with a locally bundled CodeMirror article editor in `frontend/vendor/`. Root-level Docker files support containerized runs; `README.md` and docs in `docs/` document usage and architecture.
 
 ## Build, Test, and Development Commands
 
@@ -18,6 +18,8 @@ The FastAPI application lives in `src/app`. HTTP routes are grouped in `api/`, P
   - With uv: `uv run pytest tests/test_api.py -k health`
   - Direct fallback: `& ".\.venv\Scripts\python.exe" -m pytest tests/test_api.py -k health`
 - `docker compose up -d --build` builds and starts the containerized application.
+- `npm.cmd ci` followed by `npm.cmd run build:editor` rebuilds locked editor dependencies; commit the bundle and licenses in `frontend/vendor/`. Runtime and Docker do not require Node.
+- `node scripts/test_article_editor.cjs` and `node scripts/test_articles_workbench.cjs` exercise the real browser editor with local fixtures.
 
 > **Environment Note for AI Agents**: If `uv` is not found in your shell PATH or script execution is restricted, do NOT waste turns or tokens diagnosing the system environment or running activation scripts. Directly invoke Python through the existing project virtual environment: `& ".\.venv\Scripts\python.exe" -m <module>`.
 

@@ -3,7 +3,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from app.schemas.users import RegisterUserRequest
-from app.services import history_service as database
+from app.services import database
+from app.services.timestamps import utc_timestamp
 from app.services.passwords import hash_password
 
 
@@ -39,28 +40,23 @@ def user_from_row(row: sqlite3.Row) -> User:
 
 def register_user(request: RegisterUserRequest) -> User:
     """Create an account; SQL storage stays here, outside the HTTP router."""
-    database.init_db()
-    conn = database.connect_database()
     try:
-        if conn.execute("select 1 from users where username = ? or email = ?", (request.username, request.email)).fetchone():
-            raise UsernameTakenError()
-        # Do expensive hashing before opening the write transaction.
-        password_hash = hash_password(request.password.get_secret_value())
-        now = database.utc_timestamp()
-        try:
-            with conn:
-                cursor = conn.execute(
-                    "insert into users (username, password_hash, created_at, updated_at, email) "
-                    "values (?, ?, ?, ?, ?)",
-                    (request.username, password_hash, now, now, request.email),
-                )
-                row = conn.execute("select * from users where id = ?", (cursor.lastrowid,)).fetchone()
-        except sqlite3.IntegrityError as exc:
-            # The UNIQUE constraint is authoritative when registrations race.
-            # Do not disguise NOT NULL, trigger or other storage failures as 409.
-            if getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_UNIQUE:
-                raise UsernameTakenError() from None
-            raise
-        return user_from_row(row)
-    finally:
-        conn.close()
+        with database.connection() as conn:
+            if conn.execute("select 1 from users where username = ? or email = ?", (request.username, request.email)).fetchone():
+                raise UsernameTakenError()
+            # SELECT does not start a SQLite write transaction; hash before INSERT.
+            password_hash = hash_password(request.password.get_secret_value())
+            now = utc_timestamp()
+            cursor = conn.execute(
+                "insert into users (username, password_hash, created_at, updated_at, email) "
+                "values (?, ?, ?, ?, ?)",
+                (request.username, password_hash, now, now, request.email),
+            )
+            row = conn.execute("select * from users where id = ?", (cursor.lastrowid,)).fetchone()
+            return user_from_row(row)
+    except sqlite3.IntegrityError as exc:
+        # The UNIQUE constraint is authoritative when registrations race.
+        # Do not disguise NOT NULL, trigger or other storage failures as 409.
+        if getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+            raise UsernameTakenError() from None
+        raise

@@ -1,0 +1,19 @@
+{
+  "name": "koto-article-editor",
+  "private": true,
+  "scripts": {
+    "build:editor": "node scripts/build_article_editor.cjs",
+    "test:editor": "node scripts/test_article_editor.cjs"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.13",
+    "@lezer/markdown": "1.7.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

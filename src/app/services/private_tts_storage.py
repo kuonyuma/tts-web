@@ -11,18 +11,20 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from contextlib import contextmanager
-from collections.abc import Iterator
+from contextlib import AbstractContextManager
 
 from cachetools import LRUCache
 
 from app.config import settings
+from app.services import database
 from app.services.errors import AudioUnavailable, StorageFullError
-from app.services.history_service import absolute_history_row, utc_timestamp
+from app.services.private_tts_migrations import migrate_private_tts
+from app.services.timestamps import absolute_history_row, utc_timestamp
 from app.services.tts_storage import synthesis_identity
+from app.validation import PRIVATE_CACHE_KEY_PATTERN
 
 
-KEY_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
+KEY_PATTERN = re.compile(PRIVATE_CACHE_KEY_PATTERN)
 logger = logging.getLogger(__name__)
 _store = None
 _store_lock = threading.Lock()
@@ -62,18 +64,8 @@ class PrivateTTSStore:
         self.memory = LRUCache(maxsize=settings.MEMORY_CACHE_MAX_BYTES, getsizeof=len)
         self._initialized = False
 
-    @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.db_path, timeout=settings.DB_BUSY_TIMEOUT_SECONDS)
-        try:
-            conn.row_factory = sqlite3.Row
-            conn.execute("pragma foreign_keys=on")
-            page_size = conn.execute("pragma page_size").fetchone()[0]
-            conn.execute(f"pragma max_page_count={max(1, settings.DB_MAX_BYTES // page_size)}")
-            with conn:
-                yield conn
-        finally:
-            conn.close()
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return database.connection(self.db_path, initialize=False)
 
     def init(self) -> None:
         with self.lock:
@@ -83,37 +75,9 @@ class PrivateTTSStore:
             self.root.mkdir(parents=True, exist_ok=True)
             with self._connect() as conn:
                 conn.execute("pragma journal_mode=wal")
-                conn.execute("""
-                    create table if not exists tts_audio_assets (
-                        owner_id text not null, cache_key text not null,
-                        byte_size integer not null, sha256 text not null,
-                        engine text not null, voice text not null, model text not null,
-                        format text not null default 'mp3',
-                        timeline_json text not null default '[]',
-                        status text not null default 'ready',
-                        last_access_ns integer not null,
-                        primary key (owner_id, cache_key)
-                    )
-                """)
-                columns = {row["name"] for row in conn.execute("pragma table_info(tts_audio_assets)")}
-                if "format" not in columns:
-                    conn.execute("alter table tts_audio_assets add column format text not null default 'mp3'")
-                conn.execute("""
-                    create table if not exists tts_history_v2 (
-                        id integer primary key autoincrement,
-                        owner_id text not null, cache_key text not null,
-                        text text not null, voice text not null, model text not null,
-                        engine text not null,
-                        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')),
-                        last_played_at text not null default (strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')),
-                        unique(owner_id, cache_key),
-                        foreign key (owner_id, cache_key)
-                            references tts_audio_assets(owner_id, cache_key) on delete cascade
-                    )
-                """)
-                conn.execute("create index if not exists idx_tts_assets_lru on tts_audio_assets(last_access_ns)")
-                conn.execute("create index if not exists idx_tts_assets_owner_lru on tts_audio_assets(owner_id, last_access_ns)")
-                conn.execute("create index if not exists idx_tts_history_owner on tts_history_v2(owner_id, last_played_at desc)")
+                conn.execute("begin immediate")
+                migrate_private_tts(conn)
+                conn.commit()
             self._initialized = True
 
     def file_path(self, owner: str, key: str) -> Path:
@@ -128,14 +92,19 @@ class PrivateTTSStore:
             raise OSError("Invalid private audio path")
         return path
 
-    def _usage(
-        self, conn: sqlite3.Connection, owner: str | None, protected: tuple[str, str] | None = None,
-    ) -> tuple[int, int]:
+    @staticmethod
+    def _scope(owner: str | None, protected: tuple[str, str] | None) -> tuple[str, tuple]:
         clause = "where owner_id = ? and status != 'deleting'" if owner else "where status != 'deleting'"
         args = (owner,) if owner else ()
         if protected:
             clause += " and not (owner_id=? and cache_key=?)"
             args += protected
+        return clause, args
+
+    def _usage(
+        self, conn: sqlite3.Connection, owner: str | None, protected: tuple[str, str] | None = None,
+    ) -> tuple[int, int]:
+        clause, args = self._scope(owner, protected)
         row = conn.execute(
             f"select coalesce(sum(byte_size), 0), count(*) "
             f"from tts_audio_assets {clause}", args,
@@ -156,11 +125,7 @@ class PrivateTTSStore:
     def _oldest(
         self, conn: sqlite3.Connection, owner: str | None, protected: tuple[str, str] | None,
     ) -> sqlite3.Row | None:
-        clause = "where owner_id=? and status != 'deleting'" if owner else "where status != 'deleting'"
-        args = (owner,) if owner else ()
-        if protected:
-            clause += " and not (owner_id=? and cache_key=?)"
-            args += protected
+        clause, args = self._scope(owner, protected)
         return conn.execute(
             f"select owner_id, cache_key from tts_audio_assets {clause} order by last_access_ns asc limit 1", args,
         ).fetchone()
@@ -354,11 +319,6 @@ class PrivateTTSStore:
     def list_history(self, owner: str, limit: int = 50) -> list[dict]:
         self.init()
         with self.lock, self._connect() as conn:
-            for row in conn.execute(
-                "select cache_key from tts_audio_assets where owner_id=? and status='ready'", (owner,)
-            ).fetchall():
-                if not self.file_path(owner, row["cache_key"]).is_file():
-                    self._mark_unavailable(conn, owner, row["cache_key"])
             rows = conn.execute(
                 "select h.id, h.text, h.voice, h.model, h.engine, h.cache_key, "
                 "h.created_at, h.last_played_at, a.status as audio_status "
@@ -366,7 +326,16 @@ class PrivateTTSStore:
                 "on a.owner_id=h.owner_id and a.cache_key=h.cache_key "
                 "where h.owner_id=? and a.status != 'deleting' order by a.last_access_ns desc limit ?", (owner, limit),
             ).fetchall()
-            return [absolute_history_row(row) for row in rows]
+            results = []
+            for row in rows:
+                status = row["audio_status"]
+                if status == "ready" and not self.file_path(owner, row["cache_key"]).is_file():
+                    self._mark_unavailable(conn, owner, row["cache_key"])
+                    status = "unavailable"
+                item = absolute_history_row(row)
+                item["audio_status"] = status
+                results.append(item)
+            return results
 
     def delete(self, owner: str, history_id: int) -> bool:
         self.init()
@@ -457,7 +426,6 @@ def get_private_store() -> PrivateTTSStore:
     global _store
     with _store_lock:
         if _store is None:
-            from app.services.history_service import DB_PATH
-            root = DB_PATH.parent / "private_audio"
-            _store = PrivateTTSStore(DB_PATH, root)
+            root = database.DB_PATH.parent / "private_audio"
+            _store = PrivateTTSStore(database.DB_PATH, root)
         return _store

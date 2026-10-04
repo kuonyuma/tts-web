@@ -102,12 +102,15 @@ export async function initWorkbench({ account, showPanel, fillInput }) {
     else { render(); persist(); }
     return entry;
   }
-  function closeTab(id) {
+  async function closeTab(id) {
     selectionGeneration++;
+    const node = views.nodes.get(id);
+    await node?.articleEditor.finishInput();
+    if (!alive || views.nodes.get(id) !== node) return;
     state?.flush(id).then(() => { if (alive && !opened.includes(id)) state.releaseSaved(id); });
     const index = opened.indexOf(id);
     if (index >= 0) opened.splice(index, 1);
-    views.nodes.get(id)?.liveEditor.dispose(); views.nodes.get(id)?.remove(); views.nodes.delete(id);
+    views.nodes.get(id)?.articleEditor.dispose(); views.nodes.get(id)?.remove(); views.nodes.delete(id);
     positions.delete(id);
     if (selected === id) selected = opened[Math.max(0, index - 1)] || 'library';
     render(); persist();

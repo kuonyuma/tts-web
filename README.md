@@ -76,7 +76,7 @@ for configuration, admin bootstrap, API and data ownership.
 │  - app/api/tts.py: Engine dispatch, Pydantic validation, Cache Flow     │
 │  - app/api/history.py: Tenant-isolated SQLite history endpoints         │
 │  - app/services/cache_service.py: L1 Memory LRU + L2 Disk Cache         │
-│  - app/services/history_service.py: SQLite DB (WAL Mode)                │
+│  - app/services/database.py: SQLite DB (WAL Mode)                       │
 └──────────────────┬──────────────────────────────────┬───────────────────┘
                    │                                  │
                    ▼                                  ▼

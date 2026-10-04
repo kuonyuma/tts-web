@@ -8,10 +8,10 @@ from contextlib import contextmanager
 
 from app.config import settings
 from app.services.errors import LLMConfigError, StorageFullError
-from app.services.history_service import connect_database, init_db
+from app.services import database
 from app.services.llm.gateway import complete
 from app.services.llm.registry import resolve_model
-from app.services.llm.types import LLMResult
+from app.services.llm.types import LLMResult, ModelProfile, ReasoningPreset
 from app.validation import normalize_client_id
 
 
@@ -25,86 +25,12 @@ _init_lock = threading.Lock()
 
 @contextmanager
 def _get_conn():
-    """Use the existing SQLite store and migrate legacy explanation rows in place."""
-    global _initialized
-    init_db()
-    conn = connect_database()
-    try:
-        with _init_lock:
-            if not _initialized:
-                conn.execute("""
-                    create table if not exists explanations (
-                        id integer primary key autoincrement,
-                        client_id text not null default 'default',
-                        text text not null,
-                        lang text not null default 'zh',
-                        explain_key text not null,
-                        explanation text not null,
-                        messages text not null default '[]',
-                        model_id text not null default 'gemini-legacy',
-                        provider text not null default 'gemini',
-                        upstream_model text not null default 'gemini-legacy',
-                        mode_id text not null default 'medium',
-                        profile_revision text not null default 'legacy-v1',
-                        prompt_version text not null default 'legacy-v1',
-                        created_at text not null default (datetime('now', 'localtime')),
-                        updated_at text not null default (datetime('now', 'localtime')),
-                        unique(client_id, explain_key)
-                    )
-                """)
-                columns = {row[1] for row in conn.execute("pragma table_info(explanations)")}
-                additions = {
-                    "model_id": "text not null default 'gemini-legacy'",
-                    "provider": "text not null default 'gemini'",
-                    "upstream_model": "text not null default 'gemini-legacy'",
-                    "mode_id": "text not null default 'medium'",
-                    "profile_revision": "text not null default 'legacy-v1'",
-                    "prompt_version": "text not null default 'legacy-v1'",
-                }
-                for name, definition in additions.items():
-                    if name not in columns:
-                        conn.execute(f"alter table explanations add column {name} {definition}")
-                conn.execute(
-                    "create index if not exists idx_explanations_client "
-                    "on explanations(client_id, updated_at desc)"
-                )
-                conn.execute("""
-                    create table if not exists copilot_usage_daily (
-                        usage_day text not null,
-                        client_id text not null,
-                        provider text not null,
-                        model_id text not null,
-                        mode_id text not null,
-                        calls integer not null default 0,
-                        quota_units integer not null default 0,
-                        prompt_tokens integer not null default 0,
-                        completion_tokens integer not null default 0,
-                        reasoning_tokens integer not null default 0,
-                        total_tokens integer not null default 0,
-                        primary key (usage_day, client_id, provider, model_id, mode_id)
-                    )
-                """)
-                conn.execute("""
-                    create table if not exists explanation_storage_reservations (
-                        token text primary key,
-                        client_id text not null,
-                        explain_key text not null,
-                        expires_at real not null,
-                        created_at text not null default (datetime('now', 'localtime'))
-                    )
-                """)
-                conn.execute(
-                    "create index if not exists idx_explain_res_expires "
-                    "on explanation_storage_reservations(expires_at)"
-                )
-                conn.commit()
-                _initialized = True
+    """Use the shared SQLite store and migrations."""
+    with database.connection(foreign_keys=False) as conn:
         yield conn
-    finally:
-        conn.close()
 
 
-def resolve_selection(model_id: str | None, mode_id: str | None):
+def resolve_selection(model_id: str | None, mode_id: str | None) -> tuple[ModelProfile, ReasoningPreset]:
     try:
         profile = resolve_model(model_id)
     except LLMConfigError as exc:
@@ -118,9 +44,9 @@ def resolve_selection(model_id: str | None, mode_id: str | None):
 
 def build_explain_key(
     text: str, lang: str, model_id: str | None = None, mode_id: str | None = None,
-    *, context_id: str | None = None,
+    *, context_id: str | None = None, selection: tuple[ModelProfile, ReasoningPreset] | None = None,
 ) -> str:
-    profile, mode = resolve_selection(model_id, mode_id)
+    profile, mode = selection or resolve_selection(model_id, mode_id)
     material = json.dumps(
         {
             "text": text,
@@ -220,10 +146,11 @@ def build_chat_messages(
 
 
 async def generate_explanation_text(
-    text: str, lang: str, model_id: str | None = None, mode_id: str | None = None
+    text: str, lang: str, model_id: str | None = None, mode_id: str | None = None,
+    *, selection: tuple[ModelProfile, ReasoningPreset] | None = None,
 ) -> tuple[LLMResult, str, str, str]:
-    profile, mode = resolve_selection(model_id, mode_id)
-    return await complete(profile.id, mode.id, build_explain_messages(text, lang, mode.teaching_depth))
+    profile, mode = selection or resolve_selection(model_id, mode_id)
+    return await complete(profile, mode, build_explain_messages(text, lang, mode.teaching_depth))
 
 
 async def generate_chat_answer(
@@ -233,8 +160,10 @@ async def generate_chat_answer(
     new_message: str,
     model_id: str,
     mode_id: str | None = None,
+    *, selection: tuple[ModelProfile, ReasoningPreset] | None = None,
 ) -> tuple[LLMResult, str, str, str]:
-    return await complete(model_id, mode_id, build_chat_messages(text, lang, messages, new_message))
+    profile, mode = selection or resolve_selection(model_id, mode_id)
+    return await complete(profile, mode, build_chat_messages(text, lang, messages, new_message))
 
 
 def _parse_messages(raw: str) -> list[dict]:
@@ -277,7 +206,6 @@ def reserve_storage_slot(
             (cid, explain_key)
         ).fetchone()
         if exists:
-            conn.commit()
             return ""
 
         saved_count = conn.execute("select count(*) from explanations").fetchone()[0]
@@ -297,7 +225,6 @@ def reserve_storage_slot(
             "values (?, ?, ?, ?)",
             (token, cid, explain_key, expires_at)
         )
-        conn.commit()
         return token
 
 
@@ -310,7 +237,6 @@ def release_storage_slot(token: str | None) -> None:
             "delete from explanation_storage_reservations where token = ?",
             (token,)
         )
-        conn.commit()
 
 
 def save_explanation(
@@ -331,60 +257,59 @@ def save_explanation(
     max_retries: int = 5,
 ) -> None:
     cid = normalize_client_id(client_id)
-    usage_values = [max(0, int((usage or {}).get(name, 0))) for name in (
-        "prompt_tokens", "completion_tokens", "reasoning_tokens", "total_tokens"
-    )]
-    for attempt in range(max_retries):
-        try:
-            with _get_conn() as conn:
-                conn.execute("begin immediate")
-                exists = conn.execute(
-                    "select 1 from explanations where client_id = ? and explain_key = ?", (cid, explain_key)
-                ).fetchone()
-                count = conn.execute("select count(*) from explanations").fetchone()[0]
-                if not exists and not reservation_token and count >= settings.EXPLANATION_MAX_RECORDS:
-                    raise StorageFullError("Explanation record quota reached")
-                conn.execute(
-                    "insert into explanations "
-                    "(client_id, text, lang, explain_key, explanation, messages, model_id, provider, "
-                    "upstream_model, mode_id, profile_revision, prompt_version) "
-                    "values (?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?) "
-                    "on conflict(client_id, explain_key) do update set "
-                    "explanation=excluded.explanation, model_id=excluded.model_id, provider=excluded.provider, "
-                    "upstream_model=excluded.upstream_model, mode_id=excluded.mode_id, "
-                    "profile_revision=excluded.profile_revision, prompt_version=excluded.prompt_version, "
-                    "updated_at=datetime('now', 'localtime')",
-                    (
-                        cid, text, lang, explain_key, explanation, model_id, provider, upstream_model,
-                        mode_id, profile_revision, settings.COPILOT_PROMPT_VERSION,
-                    ),
-                )
-                if usage is not None or quota_units > 0:
-                    conn.execute(
-                        "insert into copilot_usage_daily "
-                        "(usage_day, client_id, provider, model_id, mode_id, calls, quota_units, "
-                        "prompt_tokens, completion_tokens, reasoning_tokens, total_tokens) "
-                        "values (date('now'), ?, ?, ?, ?, 1, ?, ?, ?, ?, ?) "
-                        "on conflict(usage_day, client_id, provider, model_id, mode_id) do update set "
-                        "calls=calls+1, quota_units=quota_units+excluded.quota_units, "
-                        "prompt_tokens=prompt_tokens+excluded.prompt_tokens, "
-                        "completion_tokens=completion_tokens+excluded.completion_tokens, "
-                        "reasoning_tokens=reasoning_tokens+excluded.reasoning_tokens, "
-                        "total_tokens=total_tokens+excluded.total_tokens",
-                        (cid, provider, model_id, mode_id, quota_units, *usage_values),
-                    )
+
+    def _save():
+        with _get_conn() as conn:
+            conn.execute("begin immediate")
+            exists = conn.execute(
+                "select 1 from explanations where client_id = ? and explain_key = ?", (cid, explain_key)
+            ).fetchone()
+            if exists:
                 if reservation_token:
                     conn.execute(
                         "delete from explanation_storage_reservations where token = ?",
                         (reservation_token,)
                     )
-                conn.commit()
-                return
-        except sqlite3.OperationalError as exc:
-            if ("locked" in str(exc).lower() or "busy" in str(exc).lower()) and attempt < max_retries - 1:
-                time.sleep(0.05 * (2 ** attempt))
-                continue
-            raise
+            else:
+                consumed_reservation = False
+                if reservation_token:
+                    now = time.time()
+                    row = conn.execute(
+                        "select client_id, explain_key, expires_at "
+                        "from explanation_storage_reservations where token = ?",
+                        (reservation_token,)
+                    ).fetchone()
+                    if row and row[0] == cid and row[1] == explain_key and row[2] > now:
+                        conn.execute(
+                            "delete from explanation_storage_reservations where token = ?",
+                            (reservation_token,)
+                        )
+                        consumed_reservation = True
+
+                if not consumed_reservation:
+                    count = conn.execute("select count(*) from explanations").fetchone()[0]
+                    if count >= settings.EXPLANATION_MAX_RECORDS:
+                        raise StorageFullError("Explanation record quota reached")
+
+            conn.execute(
+                "insert into explanations "
+                "(client_id, text, lang, explain_key, explanation, messages, model_id, provider, "
+                "upstream_model, mode_id, profile_revision, prompt_version) "
+                "values (?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?) "
+                "on conflict(client_id, explain_key) do update set "
+                "explanation=excluded.explanation, model_id=excluded.model_id, provider=excluded.provider, "
+                "upstream_model=excluded.upstream_model, mode_id=excluded.mode_id, "
+                "profile_revision=excluded.profile_revision, prompt_version=excluded.prompt_version, "
+                "updated_at=datetime('now', 'localtime')",
+                (
+                    cid, text, lang, explain_key, explanation, model_id, provider, upstream_model,
+                    mode_id, profile_revision, settings.COPILOT_PROMPT_VERSION,
+                ),
+            )
+            if usage is not None or quota_units > 0:
+                _upsert_daily_usage(conn, cid, provider, model_id, mode_id, quota_units, usage or {})
+
+    database.run_with_retry(_save, max_retries=max_retries - 1, delay=0.05)
 
 
 def append_chat_messages(
@@ -414,42 +339,68 @@ def append_chat_messages(
             "where client_id = ? and explain_key = ?",
             (json.dumps(messages, ensure_ascii=False), cid, explain_key),
         )
-        conn.commit()
         return messages
 
 
-def record_usage(
-    client_id: str,
-    provider: str,
-    model_id: str,
-    mode_id: str,
-    quota_units: int,
-    usage: dict[str, int],
+def _upsert_daily_usage(
+    conn: sqlite3.Connection, client_id: str, provider: str, model_id: str,
+    mode_id: str, quota_units: int, usage: dict[str, int],
 ) -> None:
-    """Store aggregate billing metadata only; prompts and reasoning are never recorded."""
-    cid = normalize_client_id(client_id)
+    """Update the ledger within the caller's transaction."""
     values = [max(0, int(usage.get(name, 0))) for name in (
         "prompt_tokens", "completion_tokens", "reasoning_tokens", "total_tokens"
     )]
+    conn.execute(
+        "insert into copilot_usage_daily "
+        "(usage_day, client_id, provider, model_id, mode_id, calls, quota_units, "
+        "prompt_tokens, completion_tokens, reasoning_tokens, total_tokens) "
+        "values (date('now'), ?, ?, ?, ?, 1, ?, ?, ?, ?, ?) "
+        "on conflict(usage_day, client_id, provider, model_id, mode_id) do update set "
+        "calls=calls+1, quota_units=quota_units+excluded.quota_units, "
+        "prompt_tokens=prompt_tokens+excluded.prompt_tokens, "
+        "completion_tokens=completion_tokens+excluded.completion_tokens, "
+        "reasoning_tokens=reasoning_tokens+excluded.reasoning_tokens, "
+        "total_tokens=total_tokens+excluded.total_tokens",
+        (client_id, provider, model_id, mode_id, quota_units, *values),
+    )
+
+
+def record_usage(
+    client_id: str, provider: str, model_id: str, mode_id: str,
+    quota_units: int, usage: dict[str, int],
+) -> None:
+    """Store aggregate billing metadata only; prompts and reasoning are never recorded."""
+    cid = normalize_client_id(client_id)
     with _get_conn() as conn:
-        conn.execute(
-            "insert into copilot_usage_daily "
-            "(usage_day, client_id, provider, model_id, mode_id, calls, quota_units, "
-            "prompt_tokens, completion_tokens, reasoning_tokens, total_tokens) "
-            "values (date('now'), ?, ?, ?, ?, 1, ?, ?, ?, ?, ?) "
-            "on conflict(usage_day, client_id, provider, model_id, mode_id) do update set "
-            "calls=calls+1, quota_units=quota_units+excluded.quota_units, "
-            "prompt_tokens=prompt_tokens+excluded.prompt_tokens, "
-            "completion_tokens=completion_tokens+excluded.completion_tokens, "
-            "reasoning_tokens=reasoning_tokens+excluded.reasoning_tokens, "
-            "total_tokens=total_tokens+excluded.total_tokens",
-            (cid, provider, model_id, mode_id, quota_units, *values),
+        _upsert_daily_usage(conn, cid, provider, model_id, mode_id, quota_units, usage)
+
+def delete_explanation(client_id: str, explain_key: str) -> bool:
+    """Delete an explanation record for a client. Returns True if deleted, False otherwise."""
+    cid = normalize_client_id(client_id)
+    with _get_conn() as conn:
+        conn.execute("begin immediate")
+        cursor = conn.execute(
+            "delete from explanations where client_id = ? and explain_key = ?",
+            (cid, explain_key),
         )
-        conn.commit()
+        return cursor.rowcount > 0
+
+
+def clear_explanations(client_id: str) -> int:
+    """Delete all explanation records for a client. Returns number of deleted records."""
+    cid = normalize_client_id(client_id)
+    with _get_conn() as conn:
+        conn.execute("begin immediate")
+        cursor = conn.execute(
+            "delete from explanations where client_id = ?",
+            (cid,),
+        )
+        return cursor.rowcount
+
 
 
 __all__ = [
     "SUPPORTED_LANGS", "build_explain_key", "build_explain_messages", "build_chat_messages",
     "generate_explanation_text", "generate_chat_answer", "get_explanation", "save_explanation",
-    "append_chat_messages", "record_usage", "release_storage_slot", "reserve_storage_slot", "resolve_selection",
+    "append_chat_messages", "record_usage", "release_storage_slot", "reserve_storage_slot", "resolve_selection", "delete_explanation", "clear_explanations",
 ]

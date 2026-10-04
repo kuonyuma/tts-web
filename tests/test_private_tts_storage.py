@@ -261,3 +261,31 @@ def test_regeneration_disk_pressure_does_not_evict_its_unavailable_record(tmp_pa
     assert store.list_history("alice") == retained
     with pytest.raises(AudioUnavailable):
         store.get("alice", key)
+
+def test_list_history_only_checks_candidate_files(tmp_path):
+    from pathlib import Path
+    store = make_store(tmp_path)
+    k0 = save(store, index=0)
+    k1 = save(store, index=1)
+    k2 = save(store, index=2)
+
+    original_is_file = Path.is_file
+    is_file_calls = []
+
+    def tracking_is_file(self):
+        is_file_calls.append(str(self))
+        return original_is_file(self)
+
+    with patch.object(Path, "is_file", tracking_is_file):
+        history = store.list_history("alice", limit=1)
+        assert len(history) == 1
+        # Only the 1 candidate item should have its file checked, not all 3
+        assert len(is_file_calls) == 1
+
+    # If the candidate file is unlinked, it becomes unavailable
+    candidate_key = history[0]["cache_key"]
+    store.file_path("alice", candidate_key).unlink()
+    history_after = store.list_history("alice", limit=1)
+    assert history_after[0]["cache_key"] == candidate_key
+    assert history_after[0]["audio_status"] == "unavailable"
+

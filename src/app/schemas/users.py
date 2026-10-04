@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
+from app.validation import normalize_email, validate_unicode
 
 
 class RegisterUserRequest(BaseModel):
@@ -12,10 +13,7 @@ class RegisterUserRequest(BaseModel):
     password: SecretStr = Field(min_length=8, max_length=128, strict=True)
     email: EmailStr | None = None
 
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls, value: str | None) -> str | None:
-        return value.casefold() if value else None
+    _normalize_email = field_validator("email")(normalize_email)
 
     @field_validator("username")
     @classmethod
@@ -28,10 +26,7 @@ class RegisterUserRequest(BaseModel):
         password = value.get_secret_value()
         if not password.strip():
             raise ValueError("Password cannot be only whitespace")
-        try:
-            password.encode("utf-8")
-        except UnicodeEncodeError:
-            raise ValueError("Password must contain valid Unicode characters") from None
+        validate_unicode(password, "Password must contain valid Unicode characters")
         return value
 
 

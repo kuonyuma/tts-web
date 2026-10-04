@@ -82,7 +82,7 @@ async def pcm_to_mp3(
         async with request_deadline():
             output, _ = await asyncio.wait_for(process.communicate(pcm_data), timeout=15.0)
         if process.returncode or not output:
-            raise TTSUpstreamError(502, "Audio conversion failed")
+            raise TTSUpstreamError(502)
         if len(output) > settings.MAX_AUDIO_BYTES:
             raise TTSAudioTooLargeError()
         return output
@@ -148,16 +148,16 @@ class GeminiTTSEngine(BaseTTSEngine):
                     )
                     audio = interaction.output_audio
                     if not audio or not audio.data or len(audio.data) > settings.MAX_AUDIO_BYTES * 4:
-                        raise TTSUpstreamError(502, "Invalid audio response")
+                        raise TTSUpstreamError(502)
                     mime_parts = (audio.mime_type or "audio/l16").lower().split(";")
                     parameters = dict(part.strip().split("=", 1) for part in mime_parts[1:] if "=" in part)
                     sample_rate = int(getattr(audio, "sample_rate", None) or parameters.get("rate", 24000))
                     channels = getattr(audio, "channels", None) or 1
                     if mime_parts[0].strip() not in {"audio/l16", "audio/pcm"} or not 8000 <= sample_rate <= 48000 or channels not in (1, 2):
-                        raise TTSUpstreamError(502, "Unsupported audio format")
+                        raise TTSUpstreamError(502)
                     raw_pcm = base64.b64decode(audio.data, validate=True)
                     if not raw_pcm or len(raw_pcm) % (2 * channels):
-                        raise TTSUpstreamError(502, "Invalid PCM response")
+                        raise TTSUpstreamError(502)
                     return await pcm_to_mp3(raw_pcm, sample_rate=sample_rate, channels=channels)
         except TTSException:
             raise

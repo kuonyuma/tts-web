@@ -2,18 +2,10 @@ from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.schemas.tts import TTSRequest
-from app.services.errors import AudioUnavailable, TTSFlowUnsupportedError, TTSAudioTooLargeError
+from app.services.errors import AudioUnavailable, TTSFlowUnsupportedError, TTSAudioTooLargeError, TTSConfigError
 from app.services.runtime import cache_lock, request_deadline
 from app.services.tts_storage import AudioAsset, SynthesisSpec, TTSResult, TTSStorage, get_tts_storage
-from app.services.engines import (
-    get_engine,
-    DEFAULT_ENGINE_ID,
-    TTSException,
-    TTSConfigError,
-    TTSTimeoutError,
-    TTSUpstreamError,
-)
-from app.services.engines.base import SentenceCue, TimedSynthesisResult
+from app.services.engines import get_engine
 
 
 class TTSService:
@@ -47,15 +39,15 @@ class TTSService:
                 raise TTSConfigError("Gemini TTS 服务需要 API Key。")
             try:
                 if plan.with_timeline:
-                    timed = await synthesize_with_timeline(
-                        text=spec.text, voice=spec.voice, engine=spec.engine, api_key=api_key,
+                    timed = await engine.synthesize_with_timeline(
+                        text=spec.text, voice=spec.voice, api_key=api_key,
                     )
                     asset = AudioAsset(timed.audio_bytes, spec.engine, spec.voice, [
                         {"index": i, "text": cue.text, "start_ms": cue.start_ms, "end_ms": cue.end_ms}
                         for i, cue in enumerate(timed.sentences)
                     ])
                 else:
-                    audio = await synthesize(text=spec.text, voice=spec.voice, engine=spec.engine, api_key=api_key)
+                    audio = await engine.synthesize(text=spec.text, voice=spec.voice, api_key=api_key)
                     asset = AudioAsset(audio, spec.engine, spec.voice)
             except TTSAudioTooLargeError:
                 raise self.storage.audio_limit_error() from None
@@ -79,58 +71,3 @@ class TTSService:
 
 def get_tts_service() -> TTSService:
     return TTSService(get_tts_storage())
-
-
-async def synthesize(
-    text: str,
-    voice: str | None = None,
-    engine: str = DEFAULT_ENGINE_ID,
-    api_key: str | None = None,
-) -> bytes:
-    """
-    Synthesizes speech using the requested engine (default: 'edge').
-
-    :param text: Japanese input text
-    :param voice: Voice identifier
-    :param engine: Engine identifier ('edge', 'gemini')
-    :param api_key: Custom API Key for BYOK engines
-    :return: Binary MP3 audio bytes
-    """
-    tts_engine = get_engine(engine)
-    return await tts_engine.synthesize(text, voice=voice, api_key=api_key)
-
-
-async def synthesize_with_timeline(
-    text: str,
-    voice: str | None = None,
-    engine: str = DEFAULT_ENGINE_ID,
-    api_key: str | None = None,
-) -> TimedSynthesisResult:
-    """
-    Synthesizes speech and returns both audio bytes and sentence timestamps.
-
-    :param text: Japanese input text
-    :param voice: Voice identifier
-    :param engine: Engine identifier ('edge', 'gemini')
-    :param api_key: Custom API Key for BYOK engines
-    :return: TimedSynthesisResult containing MP3 audio bytes and list of SentenceCue
-    """
-    tts_engine = get_engine(engine)
-    if not tts_engine.supports_sentence_timeline:
-        raise TTSConfigError(f"当前语音引擎 '{engine}' 暂不支持句子同步。")
-    return await tts_engine.synthesize_with_timeline(text, voice=voice, api_key=api_key)
-
-
-__all__ = [
-    "TTSService",
-    "get_tts_service",
-    "synthesize",
-    "synthesize_with_timeline",
-    "SentenceCue",
-    "TimedSynthesisResult",
-    "TTSException",
-    "TTSConfigError",
-    "TTSTimeoutError",
-    "TTSUpstreamError",
-]
-

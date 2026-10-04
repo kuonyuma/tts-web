@@ -106,11 +106,11 @@ class EdgeTTSEngine(BaseTTSEngine):
                         chunks.append(chunk["data"])
                     elif chunk["type"] == "SentenceBoundary":
                         if len(raw_boundaries) >= 1000:
-                            raise TTSUpstreamError(502, "Too many sentence boundaries")
+                            raise TTSUpstreamError(502)
                         raw_boundaries.append(chunk)
 
                 if not chunks:
-                    raise TTSUpstreamError(502, "Empty audio stream")
+                    raise TTSUpstreamError(502)
 
                 audio_bytes = b"".join(chunks)
 
