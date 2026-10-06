@@ -111,7 +111,10 @@ let browser;
     }
     console.log('PASS both desktop sidebars animate in both directions with continuous workspace resizing');
 
+    // Let the application's media-query change handler finish before opening a drawer.
+    await evaluate("window.narrowLayoutReady=new Promise(resolve=>matchMedia('(max-width: 1100px)').addEventListener('change',()=>requestAnimationFrame(resolve),{once:true}));void 0");
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await evaluate('window.narrowLayoutReady');
     await evaluate("document.getElementById('historyBtn').click()");
     assert.equal(await evaluate("document.getElementById('chatMain').inert"),true);
     assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth"),true);
