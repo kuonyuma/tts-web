@@ -79,11 +79,16 @@ const consoleErrors=[];
     await evaluate("document.getElementById('workspaceAddBtn').click()");
     await wait("document.querySelectorAll('[data-article-open]').length===2");
     console.log('PASS account library opens');
-    const select = async id => evaluate(`document.querySelector('[data-workspace-tab="${id}"]').click()`);
+    // Scroll restoration spans animation frames; visibility alone is not readiness.
+    const settleEditor = id => wait(`document.getElementById('article-panel-${id}')?.hidden===false && !articleTest.editor('${id}').restoring`);
+    const select = async id => {
+      await evaluate(`document.querySelector('[data-workspace-tab="${id}"]').click()`);
+      if (!['ai', 'library'].includes(id)) await settleEditor(id);
+    };
     const open = async id => {
       await wait(`!!document.querySelector('[data-article-open="${id}"]')`);
       await evaluate(`document.querySelector('[data-article-open="${id}"]').click()`);
-      await wait(`document.getElementById('article-panel-${id}')?.hidden===false`);
+      await settleEditor(id);
     };
     const input = async (id,selector,value) => evaluate(`(()=>{const node=document.getElementById('article-panel-${id}');if('${selector}'==='.article-body')node.querySelector('.article-mode-edit').click();const el=node.querySelector('${selector}');if('${selector}'==='.article-body'){node.articleEditor.view.dispatch({changes:{from:0,to:node.articleEditor.view.state.doc.length,insert:${JSON.stringify(value)}}});}else{el.value=${JSON.stringify(value)};el.dispatchEvent(new Event('input',{bubbles:true}));}})()`);
     await open(ids[0]);
