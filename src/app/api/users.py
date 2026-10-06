@@ -1,7 +1,8 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 
 from app.config import settings
-from app.api.auth import admin_account, auth_request_guard, queue_email
+from app.api.auth import queue_email
+from app.api.dependencies import admin_account, auth_request_guard
 from app.services.mail_service import mail_enabled
 from app.schemas.users import RegisterUserRequest, UserResponse, UserAdminUpdate
 from app.services import auth_service as auth

@@ -63,11 +63,8 @@ async def pcm_to_mp3(
     pcm_data: bytes,
     sample_rate: int = 24000,
     channels: int = 1,
-    sample_width: int = 2
 ) -> bytes:
     """Run the existing ffmpeg conversion without blocking the event loop."""
-    if sample_width != 2:
-        raise ValueError("Only 16-bit PCM is supported")
     try:
         process = await asyncio.create_subprocess_exec(
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "s16le",

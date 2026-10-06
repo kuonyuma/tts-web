@@ -31,4 +31,5 @@ def migrate_private_tts(conn: sqlite3.Connection) -> None:
     """)
     conn.execute("create index if not exists idx_tts_assets_lru on tts_audio_assets(last_access_ns)")
     conn.execute("create index if not exists idx_tts_assets_owner_lru on tts_audio_assets(owner_id, last_access_ns)")
-    conn.execute("create index if not exists idx_tts_history_owner on tts_history_v2(owner_id, last_played_at desc)")
+    conn.execute("drop index if exists idx_tts_history_owner")
+

@@ -2,21 +2,26 @@ import hmac
 import hashlib
 from typing import Annotated
 
-from fastapi import Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.validation import normalize_client_id
 
 
-async def require_client_id(x_client_id: Annotated[str, Header(alias="X-Client-ID")]) -> str:
+def validate_client_id(client_id: str | None) -> str:
     try:
-        value = normalize_client_id(x_client_id)
+        value = normalize_client_id(client_id)
         if value.startswith("account_"):
             raise HTTPException(401, "账号数据需要登录后才能访问。")
         return value
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
+
+
+async def require_client_id(client_id: str | None) -> str:
+    """Backward-compatible async alias."""
+    return validate_client_id(client_id)
 
 
 async def require_tts_identity(
@@ -43,7 +48,7 @@ async def _resolve_identity(
         context = await run_in_threadpool(auth.authenticate, request)
         return auth.account_owner(context.user)
     if browser_mode:
-        return await require_client_id(client_id)
+        return validate_client_id(client_id)
     return trusted_identity(user, secret, missing_auth_detail=missing_auth_detail)
 
 
@@ -101,3 +106,23 @@ async def gemini_request_key(
         return settings.GEMINI_API_KEY or None
     # Knowing a client UUID never grants access to a paid server credential.
     return None
+
+
+def auth_request_guard(request: Request) -> None:
+    from app.services import auth_service as auth
+    if request.method not in auth.SAFE_METHODS:
+        auth.check_origin(request)
+        auth.rate_limit(request)
+
+
+def current_account(request: Request):
+    from app.services import auth_service as auth
+    return auth.authenticate(request)
+
+
+def admin_account(context=Depends(current_account)):
+    from app.services import auth_service as auth
+    if context.user.role != "admin":
+        raise auth.AuthError(403, "需要管理员权限。")
+    return context
+

@@ -315,6 +315,7 @@ def save_explanation(
 def append_chat_messages(
     client_id: str, explain_key: str, user_message: str, answer: str,
     *, model_id: str | None = None, mode_id: str | None = None,
+    provider: str | None = None, quota_units: int = 0, usage: dict[str, int] | None = None,
 ) -> list[dict] | None:
     cid = normalize_client_id(client_id)
     with _get_conn() as conn:
@@ -339,6 +340,10 @@ def append_chat_messages(
             "where client_id = ? and explain_key = ?",
             (json.dumps(messages, ensure_ascii=False), cid, explain_key),
         )
+        if provider is not None and (usage is not None or quota_units > 0):
+            _upsert_daily_usage(
+                conn, cid, provider, model_id or "", mode_id or "", quota_units, usage or {},
+            )
         return messages
 
 

@@ -33,7 +33,9 @@ class TTSRequest(BaseModel):
     @classmethod
     def validate_engine(cls, value: str) -> str:
         value = value.strip().lower()
-        if value not in ("edge", "gemini"):
+        try:
+            get_engine(value)
+        except ValueError:
             raise ValueError("Unknown TTS engine")
         return value
 

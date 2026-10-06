@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
-from app.api.auth import current_account
+from app.api.dependencies import current_account
 from app.schemas.articles import ArticleCreate, ArticleUpdate, ArticleResponse, ArticleSummary
 from app.services.auth_service import AuthContext
 from app.services import article_service as articles

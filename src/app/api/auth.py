@@ -7,24 +7,9 @@ from app.schemas.auth import LoginRequest, LoginResponse, EmailRequest, EmailCha
 from app.schemas.users import UserResponse
 from app.services import auth_service as auth
 from app.services import account_tokens as tokens
-from app.services.mail_service import require_mail, send_account_link
+from app.services.mail_service import mail_enabled, require_mail, send_account_link
 from app.services import oauth_service as oauth
-
-
-def auth_request_guard(request: Request) -> None:
-    if request.method not in auth.SAFE_METHODS:
-        auth.check_origin(request)
-        auth.rate_limit(request)
-
-
-def current_account(request: Request) -> auth.AuthContext:
-    return auth.authenticate(request)
-
-
-def admin_account(context: auth.AuthContext = Depends(current_account)) -> auth.AuthContext:
-    if context.user.role != "admin":
-        raise auth.AuthError(403, "需要管理员权限。")
-    return context
+from app.api.dependencies import admin_account, auth_request_guard, current_account
 
 
 def _secure_cookies() -> bool:
@@ -46,7 +31,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"], dependencies=[Depends(auth
 def account_config():
     return {
         "auth_required": settings.ACCOUNT_AUTH_REQUIRED,
-        "email_enabled": bool(settings.SMTP_HOST and settings.SMTP_FROM),
+        "email_enabled": mail_enabled(),
         "oauth_providers": ["github"] if settings.GITHUB_CLIENT_ID and settings.GITHUB_CLIENT_SECRET else [],
     }
 

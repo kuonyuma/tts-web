@@ -156,3 +156,16 @@ def test_existing_trusted_proxy_contract_is_preserved(authorization, monkeypatch
 
     request = Request({"type": "http", "method": "GET", "headers": [(b"authorization", authorization.encode())]})
     assert asyncio.run(require_copilot_identity(None, "proxy-user", "p" * 40, request)) == trusted_identity("proxy-user", "p" * 40)
+
+
+def test_signing_key_does_not_require_write_lock_when_already_persisted(monkeypatch):
+    """Test F06: Reading an already created signing_key uses read connection."""
+    monkeypatch.setattr(settings, "AUTH_JWT_SECRET", "")
+    key1 = auth.signing_key()
+    assert len(key1) > 20
+
+    # Ensure concurrent read connection does not block signing_key read
+    with database_service.connection(write=False) as conn:
+        key2 = auth.signing_key()
+        assert key1 == key2
+

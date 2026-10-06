@@ -48,6 +48,10 @@ def signing_key() -> str:
     if settings.APP_ENV == "production":
         raise AuthError(503, "账号认证尚未配置，请联系管理员。")
     # Stable across restarts, and never committed to the repository.
+    with account_connection(write=False) as conn:
+        row = conn.execute("select value from app_secrets where name='jwt'").fetchone()
+        if row:
+            return row["value"]
     with account_connection(write=True) as conn:
         row = conn.execute("select value from app_secrets where name='jwt'").fetchone()
         if row:
@@ -90,10 +94,10 @@ def check_origin(request: Request) -> None:
 
 
 def rate_limit(request: Request) -> None:
-    from app.api.limits import _resolve_client_ip
+    from app.api.limits import resolve_client_ip
 
     now = time.time()
-    key = digest(f"auth:{_resolve_client_ip(request.scope)}:{request.url.path}:{int(now // 60)}")
+    key = digest(f"auth:{resolve_client_ip(request.scope)}:{request.url.path}:{int(now // 60)}")
     with account_connection(write=True) as conn:
         conn.execute("delete from auth_rate_limits where expires_at <= ?", (now,))
         row = conn.execute("select attempts from auth_rate_limits where key_hash=?", (key,)).fetchone()
