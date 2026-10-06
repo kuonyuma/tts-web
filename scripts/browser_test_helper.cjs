@@ -64,14 +64,18 @@ async function launchBrowser({
     socket?.close();
     rejectPending(new Error('Browser connection closed'));
     if (browser && browser.exitCode === null) {
-      browser.kill();
       await Promise.race([browserExit, delay(3000)]);
+      if (browser.exitCode === null && !startupError) {
+        browser.kill();
+        await Promise.race([browserExit, delay(3000)]);
+        if (browser.exitCode === null) throw new Error('Browser did not exit before profile cleanup');
+      }
     }
     // Verify the generated profile is inside the resolved temp root before recursive removal.
     const relative = path.relative(tempRoot, path.resolve(profile));
     assert(relative && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative),
       'Browser profile must stay inside the temporary directory');
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+    await fs.promises.rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
   };
 
   try {
