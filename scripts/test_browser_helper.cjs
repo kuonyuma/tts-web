@@ -15,6 +15,9 @@ const profiles = () => fs.readdirSync(fs.realpathSync(os.tmpdir())).filter(name 
   try {
     process.env.CHROME_PATH = missing;
     await assert.rejects(launchBrowser({ profilePrefix: prefix }), error => error.code === 'ENOENT');
+    // A process that rejects browser flags must expose its startup error, not time out.
+    process.env.CHROME_PATH = process.execPath;
+    await assert.rejects(launchBrowser({ profilePrefix: prefix }), /Browser exited before debugging endpoint.*bad option/s);
   } finally {
     if (chromePath === undefined) delete process.env.CHROME_PATH;
     else process.env.CHROME_PATH = chromePath;

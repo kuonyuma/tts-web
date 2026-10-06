@@ -24,6 +24,7 @@ async function launchBrowser({
   const pending = new Map();
   const exceptions = [];
   let browser, socket, browserExit, startupError;
+  let startupStderr = '';
   let id = 0;
 
   const rejectPending = error => {
@@ -68,7 +69,7 @@ async function launchBrowser({
       if (browser.exitCode === null && !startupError) {
         browser.kill();
         await Promise.race([browserExit, delay(3000)]);
-        if (browser.exitCode === null) throw new Error('Browser did not exit before profile cleanup');
+        if (browser.exitCode === null && browser.signalCode === null) throw new Error('Browser did not exit before profile cleanup');
       }
     }
     // Verify the generated profile is inside the resolved temp root before recursive removal.
@@ -83,7 +84,9 @@ async function launchBrowser({
       '--headless=new', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0',
       '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
       ...args, 'about:blank',
-    ], { windowsHide: true, stdio: 'ignore' });
+    ], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+    browser.stderr.setEncoding('utf8');
+    browser.stderr.on('data', chunk => { startupStderr = (startupStderr + chunk).slice(-8000); });
     browserExit = new Promise(resolve => {
       browser.once('exit', resolve);
       browser.once('error', error => { startupError = error; resolve(); });
@@ -91,10 +94,13 @@ async function launchBrowser({
     const portFile = path.join(profile, 'DevToolsActivePort');
     for (let i = 0; i < 200 && !fs.existsSync(portFile); i++) {
       if (startupError) throw startupError;
+      if (browser.exitCode !== null || browser.signalCode !== null) {
+        throw new Error(`Browser exited before debugging endpoint (code ${browser.exitCode}, signal ${browser.signalCode}): ${startupStderr}`);
+      }
       await delay(startupInterval);
     }
     if (startupError) throw startupError;
-    assert(fs.existsSync(portFile), 'Browser debugging endpoint did not start');
+    assert(fs.existsSync(portFile), `Browser debugging endpoint did not start: ${startupStderr || 'no stderr output'}`);
     const port = fs.readFileSync(portFile, 'utf8').split(/\r?\n/)[0];
     const tab = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
     socket = new WebSocket(tab.webSocketDebuggerUrl);
