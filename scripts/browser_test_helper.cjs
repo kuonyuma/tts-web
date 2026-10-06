@@ -53,7 +53,12 @@ async function launchBrowser({
   const wait = async (expression, timeout = waitTimeout) => {
     const start = Date.now();
     for (let attempt = 0; waitAttempts === undefined ? Date.now() - start < timeout : attempt < waitAttempts; attempt++) {
-      if (await evaluate(expression)) return;
+      try {
+        if (await evaluate(expression)) return;
+      } catch (error) {
+        // Navigation replaces the execution context; retry readiness in the new page.
+        if (error.code !== -32000 || !/Inspected target navigated or closed|Cannot find context|Execution context was destroyed/.test(error.message)) throw error;
+      }
       await delay(50);
     }
     throw new Error(waitMessage + expression);
@@ -92,16 +97,23 @@ async function launchBrowser({
       browser.once('error', error => { startupError = error; resolve(); });
     });
     const portFile = path.join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 200 && !fs.existsSync(portFile); i++) {
+    let port;
+    for (let i = 0; i < 200 && !port; i++) {
       if (startupError) throw startupError;
       if (browser.exitCode !== null || browser.signalCode !== null) {
         throw new Error(`Browser exited before debugging endpoint (code ${browser.exitCode}, signal ${browser.signalCode}): ${startupStderr}`);
       }
-      await delay(startupInterval);
+      try {
+        const [rawPort, endpoint] = fs.readFileSync(portFile, 'utf8').split(/\r?\n/);
+        const candidate = Number(rawPort);
+        if (Number.isInteger(candidate) && candidate > 0 && candidate <= 65535 && endpoint?.startsWith('/devtools/browser/')) {
+          port = candidate;
+        }
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (!port) await delay(startupInterval);
     }
     if (startupError) throw startupError;
-    assert(fs.existsSync(portFile), `Browser debugging endpoint did not start: ${startupStderr || 'no stderr output'}`);
-    const port = fs.readFileSync(portFile, 'utf8').split(/\r?\n/)[0];
+    assert(port, `Browser debugging endpoint did not start: ${startupStderr || 'no stderr output'}`);
     const tab = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
     socket = new WebSocket(tab.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
