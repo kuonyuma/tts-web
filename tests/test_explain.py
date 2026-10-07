@@ -443,7 +443,6 @@ def test_explain_full_database_zero_paid_calls(tmp_path, monkeypatch):
     test_db = tmp_path / "test_explain.db"
     monkeypatch.setattr(database_service, "DB_PATH", test_db)
     monkeypatch.setattr(database_service, "_initialized", False)
-    monkeypatch.setattr(explain_service, "_initialized", False)
     monkeypatch.setattr(settings, "EXPLANATION_MAX_RECORDS", 1)
 
     key_existing = build_explain_key("existing sentence", "zh", "deepseek-flash", "direct")
@@ -482,7 +481,6 @@ def test_storage_reservation_contention_and_cleanup(tmp_path, monkeypatch):
     test_db = tmp_path / "test_res.db"
     monkeypatch.setattr(database_service, "DB_PATH", test_db)
     monkeypatch.setattr(database_service, "_initialized", False)
-    monkeypatch.setattr(explain_service, "_initialized", False)
     monkeypatch.setattr(settings, "EXPLANATION_MAX_RECORDS", 1)
 
     # 1. Reserve single available slot
@@ -523,7 +521,6 @@ def test_save_explanation_retries_transient_locked_database(tmp_path, monkeypatc
     test_db = tmp_path / "test_retry.db"
     monkeypatch.setattr(database_service, "DB_PATH", test_db)
     monkeypatch.setattr(database_service, "_initialized", False)
-    monkeypatch.setattr(explain_service, "_initialized", False)
 
     key = build_explain_key("retry sentence", "zh")
     original_get_conn = explain_service._get_conn
@@ -582,7 +579,6 @@ def test_invalid_or_expired_reservation_token_cannot_bypass_quota(tmp_path, monk
     test_db = tmp_path / "test_res_bypass.db"
     monkeypatch.setattr(database_service, "DB_PATH", test_db)
     monkeypatch.setattr(database_service, "_initialized", False)
-    monkeypatch.setattr(explain_service, "_initialized", False)
     monkeypatch.setattr(settings, "EXPLANATION_MAX_RECORDS", 1)
 
     key1 = build_explain_key("first sentence", "zh")
@@ -638,7 +634,6 @@ def test_explanation_delete_and_clear_releases_capacity(tmp_path, monkeypatch):
     test_db = tmp_path / "test_explain_lifecycle.db"
     monkeypatch.setattr(database_service, "DB_PATH", test_db)
     monkeypatch.setattr(database_service, "_initialized", False)
-    monkeypatch.setattr(explain_service, "_initialized", False)
     monkeypatch.setattr(settings, "EXPLANATION_MAX_RECORDS", 1)
 
     key1 = build_explain_key("sentence one", "zh")
@@ -675,7 +670,6 @@ def test_explain_api_delete_endpoints(tmp_path, monkeypatch):
     test_db = tmp_path / "test_explain_api_delete.db"
     monkeypatch.setattr(database_service, "DB_PATH", test_db)
     monkeypatch.setattr(database_service, "_initialized", False)
-    monkeypatch.setattr(explain_service, "_initialized", False)
 
     key = build_explain_key("api sentence", "zh")
     explain_service.save_explanation(TEST_CLIENT, "api sentence", "zh", key, "api explanation")
@@ -707,7 +701,6 @@ def test_chat_atomic_turn_rolls_back_ledger_on_missing_session(tmp_path, monkeyp
     test_db = tmp_path / "test_explain_atomic_chat.db"
     monkeypatch.setattr(database_service, "DB_PATH", test_db)
     monkeypatch.setattr(database_service, "_initialized", False)
-    monkeypatch.setattr(explain_service, "_initialized", False)
 
     fake_result = LLMResult(
         content="answer",

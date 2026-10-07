@@ -1,5 +1,5 @@
 from app.config import settings
-from app.services.engines.base import BaseTTSEngine, VoiceInfo
+from app.services.engines.base import BaseTTSEngine
 from app.services.engines.edge_engine import EdgeTTSEngine
 from app.services.engines.gemini_engine import GeminiTTSEngine
 
@@ -47,7 +47,6 @@ def list_engines_meta() -> list[dict]:
 
 __all__ = [
     "BaseTTSEngine",
-    "VoiceInfo",
     "EdgeTTSEngine",
     "GeminiTTSEngine",
     "get_engine",

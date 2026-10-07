@@ -13,9 +13,6 @@
   --error-border: #fecdd3;
   --error-text: #e11d48;
 
-  --accent-sakura: #f48fb1;
-  --accent-mint: #10b981;
-
   /* Default Light Theme Tokens */
   --bg-page: #ffffff;
   --bg-card: #ffffff;
@@ -27,7 +24,6 @@
 
   --primary: #0d0d0d;
   --primary-hover: #262626;
-  --primary-active: #000000;
   --primary-subtle: #f4f4f4;
   --primary-subtle-border: #e5e5e5;
 
@@ -37,7 +33,6 @@
 
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
   --shadow-focus: 0 0 0 2px rgba(13, 13, 13, 0.15);
-  --shadow-drawer: -4px 0 20px rgba(0, 0, 0, 0.06);
 }
 
 /* ── Minimalist Light Theme (ChatGPT Style) ─────────────────────── */
@@ -53,7 +48,6 @@ body[data-theme="light"] {
 
   --primary: #0d0d0d;
   --primary-hover: #262626;
-  --primary-active: #000000;
   --primary-subtle: #f4f4f4;
   --primary-subtle-border: #e5e5e5;
 
@@ -63,7 +57,6 @@ body[data-theme="light"] {
 
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
   --shadow-focus: 0 0 0 2px rgba(13, 13, 13, 0.15);
-  --shadow-drawer: -4px 0 20px rgba(0, 0, 0, 0.06);
 }
 
 body[data-theme="light"],
@@ -91,7 +84,6 @@ body[data-theme="dark"] {
 
   --primary: #818cf8;
   --primary-hover: #6366f1;
-  --primary-active: #4f46e5;
   --primary-subtle: #1e1b4b;
   --primary-subtle-border: #312e81;
 
@@ -101,7 +93,6 @@ body[data-theme="dark"] {
 
   --shadow-card: 0 8px 30px -4px rgba(0, 0, 0, 0.4);
   --shadow-focus: 0 0 0 3px rgba(129, 140, 248, 0.25);
-  --shadow-drawer: -6px 0 24px rgba(0, 0, 0, 0.5);
 }
 
 body[data-theme="dark"],

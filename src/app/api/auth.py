@@ -9,7 +9,7 @@ from app.services import auth_service as auth
 from app.services import account_tokens as tokens
 from app.services.mail_service import mail_enabled, require_mail, send_account_link
 from app.services import oauth_service as oauth
-from app.api.dependencies import admin_account, auth_request_guard, current_account
+from app.api.dependencies import auth_request_guard, current_account
 
 
 def _secure_cookies() -> bool:

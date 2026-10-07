@@ -1,12 +1,10 @@
 // Offline browser regressions for request ownership and deadlines. No live providers.
 // Node 22+ and Chrome/Edge are required; CHROME_PATH can select the executable.
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const http = require('node:http');
+const { serveFrontend } = require('./frontend_test_server.cjs');
 const { launchBrowser, delay } = require('./browser_test_helper.cjs');
 
-const root = path.resolve(__dirname, '..');
 const keys = { A: 'a'.repeat(64), B: 'b'.repeat(64) };
 let catalogTimeout = 300;
 let timestamp = new Date().toISOString();
@@ -29,13 +27,7 @@ const server = http.createServer((req, res) => {
   }]);
   if (url.pathname === '/api/copilot/models') return json({ models, request_timeout_seconds: catalogTimeout });
   if (url.pathname === '/api/history') return json(records.map((record) => ({ ...record, created_at: timestamp, last_played_at: timestamp })));
-  const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-  const file = path.resolve(root, 'frontend', relative);
-  if (file.startsWith(path.resolve(root, 'frontend') + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) {
-    res.writeHead(200, { 'Content-Type': { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html' }[path.extname(file)] || 'text/plain' });
-    return res.end(fs.readFileSync(file));
-  }
-  res.writeHead(404); res.end();
+  serveFrontend(res, url.pathname);
 });
 let browser;
 let failures = 0;

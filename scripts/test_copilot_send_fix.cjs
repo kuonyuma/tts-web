@@ -1,11 +1,8 @@
 // Regression test for Copilot send button, suggestion chips, and retry behavior
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const http = require('node:http');
+const { serveFrontend } = require('./frontend_test_server.cjs');
 const { launchBrowser, delay } = require('./browser_test_helper.cjs');
-
-const root = path.resolve(__dirname, '..');
 
 const chatRequests = [];
 let pendingChatResolver = null;
@@ -79,17 +76,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const relativePath = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\//, '');
-  const filePath = path.join(root, 'frontend', relativePath);
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-    const ext = path.extname(filePath);
-    const contentType = ext === '.js' ? 'text/javascript' : ext === '.css' ? 'text/css' : ext === '.html' ? 'text/html' : 'text/plain';
-    res.writeHead(200, { 'Content-Type': contentType });
-    return res.end(fs.readFileSync(filePath));
-  }
-
-  res.writeHead(404);
-  res.end();
+  serveFrontend(res, url.pathname);
 });
 
 let browser = null;

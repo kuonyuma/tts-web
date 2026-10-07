@@ -19,11 +19,6 @@ def validate_client_id(client_id: str | None) -> str:
         raise HTTPException(422, str(exc)) from None
 
 
-async def require_client_id(client_id: str | None) -> str:
-    """Backward-compatible async alias."""
-    return validate_client_id(client_id)
-
-
 async def require_tts_identity(
     x_client_id: Annotated[str | None, Header(alias="X-Client-ID")] = None,
     x_authenticated_user: Annotated[str | None, Header(alias="X-Authenticated-User", max_length=512)] = None,

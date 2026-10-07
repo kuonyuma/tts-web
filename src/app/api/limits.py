@@ -29,9 +29,6 @@ def resolve_client_ip(scope: dict) -> str:
     return peer
 
 
-_resolve_client_ip = resolve_client_ip
-
-
 class RequestLimits:
     """Bounded admission and request buffering for the supported single worker."""
 
@@ -69,7 +66,7 @@ class RequestLimits:
         if self.window != window:
             self.window, self.counts, self.total = window, {}, 0
         # Only trust forwarded headers if the immediate peer is in TRUSTED_PROXIES.
-        peer = _resolve_client_ip(scope)
+        peer = resolve_client_ip(scope)
         if self.total >= settings.GLOBAL_REQUESTS_PER_MINUTE or self.counts.get(peer, 0) >= settings.REQUESTS_PER_MINUTE:
             return await reject(429, "请求过于频繁，请稍后重试。")
         self.total += 1

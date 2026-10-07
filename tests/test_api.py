@@ -346,7 +346,7 @@ def test_tts_flow_get_manifest_not_found():
 
 
 def test_resolve_client_ip_trusted_proxy():
-    from app.api.limits import _resolve_client_ip
+    from app.api.limits import resolve_client_ip
 
     # Trusted proxy should resolve X-Forwarded-For
     scope_trusted = {
@@ -354,7 +354,7 @@ def test_resolve_client_ip_trusted_proxy():
         "client": ("127.0.0.1", 12345),
         "headers": [(b"x-forwarded-for", b"203.0.113.195, 10.0.0.1")],
     }
-    assert _resolve_client_ip(scope_trusted) == "203.0.113.195"
+    assert resolve_client_ip(scope_trusted) == "203.0.113.195"
 
     # X-Real-IP fallback
     scope_real_ip = {
@@ -362,7 +362,7 @@ def test_resolve_client_ip_trusted_proxy():
         "client": ("127.0.0.1", 12345),
         "headers": [(b"x-real-ip", b"198.51.100.2")],
     }
-    assert _resolve_client_ip(scope_real_ip) == "198.51.100.2"
+    assert resolve_client_ip(scope_real_ip) == "198.51.100.2"
 
     # Untrusted direct peer should NOT trust X-Forwarded-For
     scope_untrusted = {
@@ -370,4 +370,4 @@ def test_resolve_client_ip_trusted_proxy():
         "client": ("192.168.1.50", 12345),
         "headers": [(b"x-forwarded-for", b"203.0.113.195")],
     }
-    assert _resolve_client_ip(scope_untrusted) == "192.168.1.50"
+    assert resolve_client_ip(scope_untrusted) == "192.168.1.50"

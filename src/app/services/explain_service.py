@@ -2,7 +2,6 @@ import hashlib
 import json
 import secrets
 import sqlite3
-import threading
 import time
 from contextlib import contextmanager
 
@@ -19,8 +18,6 @@ SUPPORTED_LANGS = ("zh", "ja", "en")
 MAX_CONTEXT_TURNS = 20
 MAX_CONTEXT_CHARS = 24000
 MAX_STORED_MESSAGES = 60
-_initialized = False
-_init_lock = threading.Lock()
 
 
 @contextmanager
@@ -370,15 +367,6 @@ def _upsert_daily_usage(
     )
 
 
-def record_usage(
-    client_id: str, provider: str, model_id: str, mode_id: str,
-    quota_units: int, usage: dict[str, int],
-) -> None:
-    """Store aggregate billing metadata only; prompts and reasoning are never recorded."""
-    cid = normalize_client_id(client_id)
-    with _get_conn() as conn:
-        _upsert_daily_usage(conn, cid, provider, model_id, mode_id, quota_units, usage)
-
 def delete_explanation(client_id: str, explain_key: str) -> bool:
     """Delete an explanation record for a client. Returns True if deleted, False otherwise."""
     cid = normalize_client_id(client_id)
@@ -407,5 +395,5 @@ def clear_explanations(client_id: str) -> int:
 __all__ = [
     "SUPPORTED_LANGS", "build_explain_key", "build_explain_messages", "build_chat_messages",
     "generate_explanation_text", "generate_chat_answer", "get_explanation", "save_explanation",
-    "append_chat_messages", "record_usage", "release_storage_slot", "reserve_storage_slot", "resolve_selection", "delete_explanation", "clear_explanations",
+    "append_chat_messages", "release_storage_slot", "reserve_storage_slot", "resolve_selection", "delete_explanation", "clear_explanations",
 ]

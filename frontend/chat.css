@@ -10,7 +10,7 @@
 .chat-app [hidden] { display: none !important; }
 .chat-shell { display: flex; height: 100%; width: 100%; overflow: hidden; }
 .conversation-sidebar { position: relative; width: var(--sidebar-left-width, 250px); flex: 0 0 var(--sidebar-left-width, 250px); min-width: 180px; max-width: 480px; display: flex; flex-direction: column; padding: 25px 16px 16px; border-right: 1px solid var(--chat-line); background: var(--bg-subtle); }
-.brand-row, .ai-heading, .chat-header, .composer-bottom, .composer-hint, .ai-input-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand-row, .chat-header, .composer-bottom, .composer-hint, .ai-input-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; font-weight: 700; font-size: 19px; letter-spacing: 2px; }
 .brand small { display: block; color: var(--chat-muted); font-size: 10px; font-weight: 400; letter-spacing: 2px; }
 .brand-mark { display: grid; place-items: center; width: 37px; height: 42px; border: 1px solid var(--chat-accent); border-radius: 11px 11px 11px 2px; color: var(--chat-accent); font-family: serif; font-size: 24px; }
@@ -129,7 +129,6 @@
 .chat-notice button { background: transparent; border: 0; color: inherit; }
 .jump-latest { position: absolute; bottom: 212px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border: 1px solid var(--chat-line); border-radius: 20px; background: var(--bg-card); color: var(--chat-accent); font-size: 11px !important; box-shadow: 0 2px 8px #0001; }
 .ai-sidebar { position: relative; display: flex; flex-direction: column; flex: 0 0 var(--sidebar-right-width, 345px); width: var(--sidebar-right-width, 345px); min-width: 260px; max-width: 600px; min-height: 0; border-left: 1px solid var(--chat-line); background: var(--bg-subtle); }
-.ai-heading { height: 79px; flex-shrink: 0; padding: 0 20px; border-bottom: 1px solid var(--chat-line); }
 .ai-heading-title { display: flex; align-items: center; gap: 10px; }
 .ai-heading-title strong { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; }
 .ai-symbol { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: var(--chat-tint); color: var(--chat-accent); font-size: 16px; font-weight: 700; line-height: 1; }
