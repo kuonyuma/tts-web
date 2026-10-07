@@ -19,7 +19,6 @@ from app.services.explain_service import (
     generate_chat_answer,
     generate_explanation_text,
     get_explanation,
-    record_usage,
     release_storage_slot,
     reserve_storage_slot,
     resolve_selection,
@@ -188,12 +187,17 @@ async def chat_about_sentence(
             mode_id=mode.id,
             selection=(profile, mode),
         )
-        await run_in_threadpool(
-            record_usage, x_client_id, result.provider, model_id, mode_id, mode.quota_weight, result.usage
-        )
         updated = await run_in_threadpool(
-            append_chat_messages, x_client_id, request.explain_key, request.message, result.content,
-            model_id=model_id, mode_id=mode_id,
+            append_chat_messages,
+            x_client_id,
+            request.explain_key,
+            request.message,
+            result.content,
+            model_id=model_id,
+            mode_id=mode_id,
+            provider=result.provider,
+            quota_units=mode.quota_weight,
+            usage=result.usage,
         )
         if updated is None:
             raise HTTPException(409, "讲解会话已失效，请重新生成讲解。")

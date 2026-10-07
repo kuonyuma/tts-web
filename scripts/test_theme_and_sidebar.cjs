@@ -111,7 +111,10 @@ let browser;
     }
     console.log('PASS both desktop sidebars animate in both directions with continuous workspace resizing');
 
+    // Let the application's media-query change handler finish before opening a drawer.
+    await evaluate("window.narrowLayoutReady=new Promise(resolve=>matchMedia('(max-width: 1100px)').addEventListener('change',()=>requestAnimationFrame(resolve),{once:true}));void 0");
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await evaluate('window.narrowLayoutReady');
     await evaluate("document.getElementById('historyBtn').click()");
     assert.equal(await evaluate("document.getElementById('chatMain').inert"),true);
     assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth"),true);
@@ -145,10 +148,21 @@ let browser;
     await evaluate("document.getElementById('aiCloseBtn').click();document.getElementById('settingsBtn').click();var motionOption=document.getElementById('motionSelect');motionOption.value='full';motionOption.dispatchEvent(new Event('change'));document.getElementById('modalCloseBtn').click()");
     const forced=await evaluate("sampleTransition('aiPanelBtn','explainSection')");
     assert(forced.middle.x>Math.min(forced.before.x,forced.after.x) && forced.middle.x<Math.max(forced.before.x,forced.after.x),'Explicit on overrides browser reduced-motion preference');
-    await send('Page.reload');
-    await wait("document.body?.dataset.ready==='true'");
-    assert.equal(await evaluate("document.getElementById('motionSelect').value"),'full');
-    assert.notEqual(await evaluate("getComputedStyle(document.getElementById('explainSection')).transition"),'none');
+    for (const delayedNavigation of [false, true]) {
+      const beforeReload = await evaluate('performance.timeOrigin');
+      // Clear the old document's marker before navigation can race the readiness check.
+      await evaluate("document.body.dataset.ready='reloading'");
+      if (delayedNavigation) {
+        // Keep the old page alive briefly to exercise the stale-readiness regression.
+        await evaluate('setTimeout(() => location.reload(), 100)');
+      } else {
+        await send('Page.reload');
+      }
+      await wait("document.body?.dataset.ready==='true'");
+      assert.notEqual(await evaluate('performance.timeOrigin'), beforeReload, 'Readiness must belong to the reloaded document');
+      assert.equal(await evaluate("document.getElementById('motionSelect').value"),'full');
+      assert.notEqual(await evaluate("getComputedStyle(document.getElementById('explainSection')).transition"),'none');
+    }
     await evaluate("document.getElementById('settingsBtn').click();var motionOption=document.getElementById('motionSelect');motionOption.value='reduced';motionOption.dispatchEvent(new Event('change'));document.getElementById('modalCloseBtn').click()");
     await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
     await evaluate("document.getElementById('aiPanelBtn').click();document.getElementById('explainSection').getBoundingClientRect()");

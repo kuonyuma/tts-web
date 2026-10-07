@@ -127,7 +127,7 @@ class PrivateTTSStore:
     ) -> sqlite3.Row | None:
         clause, args = self._scope(owner, protected)
         return conn.execute(
-            f"select owner_id, cache_key from tts_audio_assets {clause} order by last_access_ns asc limit 1", args,
+            f"select owner_id, cache_key, byte_size from tts_audio_assets {clause} order by last_access_ns asc limit 1", args,
         ).fetchone()
 
     def _prune(
@@ -163,7 +163,8 @@ class PrivateTTSStore:
                 victim_id = (victim["owner_id"], victim["cache_key"])
                 conn.execute("update tts_audio_assets set status='deleting' where owner_id=? and cache_key=?", victim_id)
                 victims.append(victim_id)
-                used, count = self._usage(conn, scoped_owner, protected)
+                used -= int(victim["byte_size"])
+                count -= 1
             if used + added_bytes > byte_cap or count + added_count > count_cap:
                 raise StorageFullError("Retained storage capacity exhausted")
         return victims

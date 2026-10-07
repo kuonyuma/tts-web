@@ -11,7 +11,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _resolve_client_ip(scope: dict) -> str:
+def resolve_client_ip(scope: dict) -> str:
     peer = (scope.get("client") or ("unknown", 0))[0]
     trusted = set(settings.TRUSTED_PROXIES)
     if peer in trusted:
@@ -27,6 +27,9 @@ def _resolve_client_ip(scope: dict) -> str:
             if ip:
                 return ip
     return peer
+
+
+_resolve_client_ip = resolve_client_ip
 
 
 class RequestLimits:

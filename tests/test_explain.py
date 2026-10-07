@@ -698,3 +698,33 @@ def test_explain_api_delete_endpoints(tmp_path, monkeypatch):
     assert resp.status_code == 204
     assert explain_service.get_explanation(TEST_CLIENT, key) is None
 
+
+def test_chat_atomic_turn_rolls_back_ledger_on_missing_session(tmp_path, monkeypatch):
+    """Test F09: If chat session does not exist, no phantom usage ledger is committed."""
+    from app.services import explain_service
+    from app.services.llm.types import LLMResult
+
+    test_db = tmp_path / "test_explain_atomic_chat.db"
+    monkeypatch.setattr(database_service, "DB_PATH", test_db)
+    monkeypatch.setattr(database_service, "_initialized", False)
+    monkeypatch.setattr(explain_service, "_initialized", False)
+
+    fake_result = LLMResult(
+        content="answer",
+        provider="deepseek",
+        upstream_model="deepseek-flash",
+        usage={"total_tokens": 10},
+    )
+
+    # Calling append_chat_messages on a non-existent session
+    res = explain_service.append_chat_messages(
+        TEST_CLIENT, "non_existent_key", "hello", "answer",
+        model_id="deepseek-flash", mode_id="direct", provider="deepseek",
+        quota_units=1, usage=fake_result.usage,
+    )
+    assert res is None
+
+    with explain_service._get_conn() as conn:
+        assert conn.execute("select count(*) from copilot_usage_daily").fetchone()[0] == 0
+
+

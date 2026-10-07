@@ -302,6 +302,7 @@ export class ArticleViews {
   async remove(id) {
     const title = this.state.entries.get(id)?.title || this.rows.find(row => row.id === id)?.title || '这篇文章';
     if (!confirm(`删除「${title}」？文章将从账号文章库删除，此操作无法撤销。`)) return;
+    await this.nodes.get(id)?.articleEditor.finishInput();
     await this.state.remove(id);
   }
   dispose() {

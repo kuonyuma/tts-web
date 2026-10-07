@@ -24,6 +24,7 @@ async function launchBrowser({
   const pending = new Map();
   const exceptions = [];
   let browser, socket, browserExit, startupError;
+  let startupStderr = '';
   let id = 0;
 
   const rejectPending = error => {
@@ -52,7 +53,12 @@ async function launchBrowser({
   const wait = async (expression, timeout = waitTimeout) => {
     const start = Date.now();
     for (let attempt = 0; waitAttempts === undefined ? Date.now() - start < timeout : attempt < waitAttempts; attempt++) {
-      if (await evaluate(expression)) return;
+      try {
+        if (await evaluate(expression)) return;
+      } catch (error) {
+        // Navigation replaces the execution context; retry readiness in the new page.
+        if (error.code !== -32000 || !/Inspected target navigated or closed|Cannot find context|Execution context was destroyed/.test(error.message)) throw error;
+      }
       await delay(50);
     }
     throw new Error(waitMessage + expression);
@@ -64,14 +70,18 @@ async function launchBrowser({
     socket?.close();
     rejectPending(new Error('Browser connection closed'));
     if (browser && browser.exitCode === null) {
-      browser.kill();
       await Promise.race([browserExit, delay(3000)]);
+      if (browser.exitCode === null && !startupError) {
+        browser.kill();
+        await Promise.race([browserExit, delay(3000)]);
+        if (browser.exitCode === null && browser.signalCode === null) throw new Error('Browser did not exit before profile cleanup');
+      }
     }
     // Verify the generated profile is inside the resolved temp root before recursive removal.
     const relative = path.relative(tempRoot, path.resolve(profile));
     assert(relative && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative),
       'Browser profile must stay inside the temporary directory');
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+    await fs.promises.rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
   };
 
   try {
@@ -79,19 +89,31 @@ async function launchBrowser({
       '--headless=new', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0',
       '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
       ...args, 'about:blank',
-    ], { windowsHide: true, stdio: 'ignore' });
+    ], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+    browser.stderr.setEncoding('utf8');
+    browser.stderr.on('data', chunk => { startupStderr = (startupStderr + chunk).slice(-8000); });
     browserExit = new Promise(resolve => {
       browser.once('exit', resolve);
       browser.once('error', error => { startupError = error; resolve(); });
     });
     const portFile = path.join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 200 && !fs.existsSync(portFile); i++) {
+    let port;
+    for (let i = 0; i < 200 && !port; i++) {
       if (startupError) throw startupError;
-      await delay(startupInterval);
+      if (browser.exitCode !== null || browser.signalCode !== null) {
+        throw new Error(`Browser exited before debugging endpoint (code ${browser.exitCode}, signal ${browser.signalCode}): ${startupStderr}`);
+      }
+      try {
+        const [rawPort, endpoint] = fs.readFileSync(portFile, 'utf8').split(/\r?\n/);
+        const candidate = Number(rawPort);
+        if (Number.isInteger(candidate) && candidate > 0 && candidate <= 65535 && endpoint?.startsWith('/devtools/browser/')) {
+          port = candidate;
+        }
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (!port) await delay(startupInterval);
     }
     if (startupError) throw startupError;
-    assert(fs.existsSync(portFile), 'Browser debugging endpoint did not start');
-    const port = fs.readFileSync(portFile, 'utf8').split(/\r?\n/)[0];
+    assert(port, `Browser debugging endpoint did not start: ${startupStderr || 'no stderr output'}`);
     const tab = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
     socket = new WebSocket(tab.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });

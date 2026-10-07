@@ -15,17 +15,37 @@ const profiles = () => fs.readdirSync(fs.realpathSync(os.tmpdir())).filter(name 
   try {
     process.env.CHROME_PATH = missing;
     await assert.rejects(launchBrowser({ profilePrefix: prefix }), error => error.code === 'ENOENT');
+    // A process that rejects browser flags must expose its startup error, not time out.
+    process.env.CHROME_PATH = process.execPath;
+    await assert.rejects(launchBrowser({ profilePrefix: prefix }), /Browser exited before debugging endpoint.*bad option/s);
   } finally {
     if (chromePath === undefined) delete process.env.CHROME_PATH;
     else process.env.CHROME_PATH = chromePath;
   }
   assert.deepEqual(profiles(), before, 'Failed startup must clean its temporary profile');
 
-  const browser = await launchBrowser({ profilePrefix: prefix });
+  // Chromium can create the port file before either of its two lines is complete.
+  const readFileSync = fs.readFileSync;
+  const partialPortFiles = ['', '12345\n'];
+  let browser;
+  fs.readFileSync = function (file, ...args) {
+    if (typeof file === 'string' && path.basename(file) === 'DevToolsActivePort' && partialPortFiles.length) {
+      return partialPortFiles.shift();
+    }
+    return readFileSync.call(this, file, ...args);
+  };
+  try { browser = await launchBrowser({ profilePrefix: prefix }); }
+  finally { fs.readFileSync = readFileSync; }
   try {
     assert.deepEqual(await browser.evaluate('Promise.resolve({ value: 42 })'), { value: 42 });
     await assert.rejects(browser.send('Runtime.nonexistentMethod'), error => error.code === -32601);
     await assert.rejects(browser.evaluate('throw new Error("expected evaluation error")'), /expected evaluation error/);
+    await assert.rejects(browser.wait('throw new Error("expected readiness error")'), /expected readiness error/);
+    // A readiness evaluation can lose its execution context during navigation.
+    await Promise.all([
+      browser.wait("new Promise(resolve=>setTimeout(()=>resolve(location.hash==='#ready'),100))"),
+      browser.send('Page.navigate', { url: 'data:text/html,<title>Ready</title>#ready' }),
+    ]);
     const pending = browser.evaluate('new Promise(() => {})').then(() => 'resolved', () => 'rejected');
     await browser.close();
     assert.equal(await Promise.race([pending, delay(500).then(() => 'hung')]), 'rejected');
