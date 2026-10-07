@@ -50,7 +50,7 @@ function updateCounter() {
   $('charCounter').style.color = length > getMaxCharCount() ? 'var(--error-text)' : '';
   $('generateBtn').disabled = !ready || length < getMinCharCount() || length > getMaxCharCount();
 }
-function formatTimestamp(isoString) {
+function formatTimestamp(isoString, includeSeconds = false) {
   if (!isoString) return '';
   const date = new Date(isoString);
   if (!Number.isFinite(date.getTime())) return '';
@@ -60,21 +60,8 @@ function formatTimestamp(isoString) {
   const d = pad(date.getDate());
   const hh = pad(date.getHours());
   const mm = pad(date.getMinutes());
-  return `${y}-${m}-${d} ${hh}:${mm}`;
-}
-
-function formatFullTimestamp(isoString) {
-  if (!isoString) return '';
-  const date = new Date(isoString);
-  if (!Number.isFinite(date.getTime())) return '';
-  const pad = n => String(n).padStart(2, '0');
-  const y = date.getFullYear();
-  const m = pad(date.getMonth() + 1);
-  const d = pad(date.getDate());
-  const hh = pad(date.getHours());
-  const mm = pad(date.getMinutes());
-  const ss = pad(date.getSeconds());
-  return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+  const seconds = includeSeconds ? `:${pad(date.getSeconds())}` : '';
+  return `${y}-${m}-${d} ${hh}:${mm}${seconds}`;
 }
 
 function updateNewConversationBtnState() {
@@ -96,7 +83,7 @@ function renderConversations() {
   $('conversationCount').textContent = conversations.length;
   $('conversationList').innerHTML = conversations.map(c => {
     const timeFormatted = formatTimestamp(c.createdAt);
-    const fullTime = formatFullTimestamp(c.createdAt);
+    const fullTime = formatTimestamp(c.createdAt, true);
     const timeDisplay = timeFormatted ? `创建于 ${timeFormatted}` : '';
     const tooltip = fullTime ? `创建时间：${fullTime}` : escapeHtml(c.title);
     return `
@@ -205,7 +192,6 @@ function bindAI(force = false) {
   const targetId = message ? `${activeId}:${message.id}` : null;
   if (!force && targetId === aiTargetId) return;
   aiTargetId = targetId;
-  resetExplanation();
   setCurrentExplainText(message?.text || null, message ? `${activeId}_${message.id}` : null);
   $('explainChatInput').value = '';
   $('explainTarget').textContent = message?.text || '发送一段文本，开始阅读。';

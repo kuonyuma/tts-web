@@ -1,12 +1,10 @@
 // Run with Node 22+ and Chrome/Chromium (CHROME_PATH can select the executable).
 // This serves only fixture API responses and uses a disposable browser profile.
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const http = require('node:http');
+const { serveFrontend } = require('./frontend_test_server.cjs');
 const { launchBrowser, delay } = require('./browser_test_helper.cjs');
 
-const root = path.resolve(__dirname, '..');
 const key = '0123456789abcdef'.repeat(4);
 const attack = 'test" onmouseover="document.documentElement.dataset.auditXss=\'executed\'';
 let mode = 'success';
@@ -52,15 +50,7 @@ const server = http.createServer(async (req, res) => {
     if (audioUnavailable) return json({ detail: '原音频不可用' }, 410);
     res.writeHead(200, { 'Content-Type': 'audio/mpeg' }); return res.end(wav);
   }
-  const relativePath = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\//, '');
-  const filePath = path.join(root, 'frontend', relativePath);
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-    const ext = path.extname(filePath);
-    const contentType = ext === '.js' ? 'text/javascript' : ext === '.css' ? 'text/css' : ext === '.html' ? 'text/html' : 'text/plain';
-    res.writeHead(200, { 'Content-Type': contentType });
-    return res.end(fs.readFileSync(filePath));
-  }
-  res.writeHead(404); res.end();
+  serveFrontend(res, url.pathname);
 });
 
 let browser;

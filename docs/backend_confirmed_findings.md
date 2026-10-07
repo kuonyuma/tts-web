@@ -15,7 +15,7 @@
 | C03 | Legacy 历史全量取回、转换时间、Python 排序后截取 | F13 | 已修复优化 | 规范 SQL 查询为 `order by strftime('%Y-%m-%d %H:%M:%f', last_played_at) desc, id desc limit ?`，将时间跨时区归一化排序与截取完全下推至数据库。 |
 | C04 | Legacy 新资产落盘前全目录检查和排序 | F20 | 已修复优化 | 将 `_entries()` 重构为单趟 `os.scandir` 扫描，一次性归集 `.mp3` 与 `.timeline.json` 大小，大幅减少多重 `stat` 和 `exists` 系统调用。 |
 | C05 | 讲解存档缺少应用内容量释放路径 | F10 | 已修复补齐 | 在 `explain_service.py` 增加 `delete_explanation` 与 `clear_explanations`；在 `api/explain.py` 新增 `DELETE /api/explain/{explain_key}` 与 `DELETE /api/explain` 路由，释放存储容量。 |
-| C06 | 文章墓碑缺少回收政策；不存在分支有重复 UPDATE | F11 | 已修复补齐 | 消除 `delete_article` 不存在分支中的重复 UPDATE，单次 INSERT 直接写入终态墓碑；增加 `prune_tombstones(older_than_seconds)` 回收函数支持基于时间窗口清理过期墓碑。 |
+| C06 | 文章墓碑缺少回收政策；不存在分支有重复 UPDATE | F11 | 重复 UPDATE 已修复；回收未接入 | 单次 INSERT 直接写入终态墓碑。原 `prune_tombstones` 只有测试调用，未提供运行入口；2026-10-07 清理移除该孤立实现，保留墓碑保护。 |
 | C07 | 保存讲解未验证存储预留 token 的有效性与归属 | F08 | 已修复补齐 | 在 `save_explanation` 事务内严格校验 token 归属、键与有效期限并原子消费；有效消费跳过冗余 `count(*)` 查询；无效/过期预留拒绝越权并降级限额校验。 |
 | C08 | 同库仍有三套表初始化生命周期 | F07 | 已修复收敛 | 提取 `migrate_explanations(conn)` 纳入 `database.init_db()` 统一主生命周期；提取 `migrate_private_tts(conn)`，统一表迁移并保留独立 Store 实例初始化能力。 |
 
@@ -70,7 +70,7 @@
   - `DELETE /api/explain`：清空当前身份的全部讲解，成功返回 204。
 - 对应测试：[`test_explanation_delete_and_clear_releases_capacity`](../tests/test_explain.py)、[`test_explain_api_delete_endpoints`](../tests/test_explain.py)。
 
-### C06：文章墓碑消除重复 UPDATE 与增加回收策略
+### C06：文章墓碑消除重复 UPDATE；回收策略尚未接入
 
 **修改实现**：
 - 文件：[`src/app/services/article_service.py`](../src/app/services/article_service.py)。
@@ -80,8 +80,8 @@
   values(?,?,'','',?,?,1,1)
   ```
   避免了先 INSERT 空墓碑再立即执行相同字段 UPDATE 的多余写操作。
-- 墓碑生命周期回收：新增 `prune_tombstones(older_than_seconds: float = 7 * 86400.0) -> int`，清理更新时间早于保留窗口的软删除记录（`deleted=1 and updated_at < ?`），在有效防乱序重试期过后释放数据库存储空间。
-- 对应测试：[`test_tombstone_inserted_without_duplicate_update`](../tests/test_articles.py)、[`test_article_tombstone_pruning`](../tests/test_articles.py)。
+- 墓碑生命周期回收：原时间窗口清理函数未接入应用、CLI 或调度，不能代表已具备定期回收能力。2026-10-07 清理删除该函数和仅为其存在的测试；墓碑写入及迟到请求保护继续保留。目前没有自动回收策略。
+- 对应测试：[`test_tombstone_inserted_without_duplicate_update`](../tests/test_articles.py)；删除先于创建到达的保护仍由文章 API 回归覆盖。
 
 ### C07：讲解存储预留 token 有效性校验与原子消费
 

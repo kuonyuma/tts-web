@@ -36,4 +36,6 @@ def migrate_history(conn: sqlite3.Connection) -> None:
         conn.execute("alter table history_migration rename to history")
     elif "engine" not in columns:
         conn.execute("alter table history add column engine text not null default 'gemini'")
-    conn.execute("create index if not exists idx_history_client on history(client_id, last_played_at desc)")
+    # The unique (client_id, cache_key) index already serves owner lookups;
+    # raw timestamp order cannot serve the normalized-time history sort.
+    conn.execute("drop index if exists idx_history_client")

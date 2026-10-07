@@ -4,7 +4,7 @@ import pytest
 
 from app.api.limits import RequestLimits
 from app.main import app
-from app.services import cache_service, explain_service, runtime
+from app.services import cache_service, runtime
 
 
 @pytest.fixture
@@ -17,7 +17,6 @@ def isolated_storage(tmp_path, monkeypatch):
     """Tests never write to the user's cache/history or call real providers."""
     monkeypatch.setattr(database_service, "DB_PATH", tmp_path / "history.db")
     monkeypatch.setattr(database_service, "_initialized", False)
-    monkeypatch.setattr(explain_service, "_initialized", False)
     monkeypatch.setattr(cache_service, "CACHE_DIR", tmp_path / "audio")
     cache_service._memory_cache.clear()
     cache_service._flow_cache.clear()

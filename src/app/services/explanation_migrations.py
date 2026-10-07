@@ -37,10 +37,8 @@ def migrate_explanations(conn: sqlite3.Connection) -> None:
     for name, definition in additions.items():
         if name not in columns:
             conn.execute(f"alter table explanations add column {name} {definition}")
-    conn.execute(
-        "create index if not exists idx_explanations_client "
-        "on explanations(client_id, updated_at desc)"
-    )
+    # Owner/key lookups and owner deletion use the existing unique index.
+    conn.execute("drop index if exists idx_explanations_client")
     conn.execute("""
         create table if not exists copilot_usage_daily (
             usage_day text not null,

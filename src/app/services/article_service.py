@@ -1,5 +1,3 @@
-import time
-from datetime import datetime, timezone
 from app.services.database import connection as account_connection
 from app.services.timestamps import utc_timestamp
 from app.schemas.articles import ArticleCreate, ArticleUpdate
@@ -99,18 +97,3 @@ def delete_article(user_id: int, article_id: str) -> None:
             )
     if existing is None:
         raise ArticleError(404, "文章不存在或已删除。")
-
-
-def prune_tombstones(older_than_seconds: float = 7 * 86400.0) -> int:
-    """Delete tombstones older than the retention window.
-
-    Late POST requests beyond this window will no longer be rejected with 410,
-    freeing database storage capacity.
-    """
-    cutoff = datetime.fromtimestamp(time.time() - older_than_seconds, timezone.utc).isoformat()
-    with account_connection(write=True) as conn:
-        cursor = conn.execute(
-            "delete from articles where deleted=1 and updated_at < ?",
-            (cutoff,)
-        )
-        return cursor.rowcount

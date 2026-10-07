@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 
 from app.config import settings
 from app.services import database

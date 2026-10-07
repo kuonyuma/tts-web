@@ -22,6 +22,36 @@ from app.services.private_tts_storage import PrivateTTSStore
 from app.services.tts_storage import AudioAsset, SynthesisSpec
 
 
+def test_repeated_startup_drops_redundant_indexes_without_losing_owner_data(monkeypatch):
+    from app.services import explain_service as explain
+
+    history.add_or_touch("alice", "first", "voice", "edge", "edge", "key-one")
+    history.add_or_touch("bob", "private", "voice", "edge", "edge", "key-bob")
+    history.add_or_touch("alice", "second", "voice", "edge", "edge", "key-two")
+    explain.save_explanation("alice", "hello", "zh", "explanation-one", "saved answer")
+    explain.save_explanation("bob", "secret", "zh", "explanation-bob", "private answer")
+    with database_service.connection() as conn:
+        conn.execute("create index if not exists idx_history_client on history(client_id, last_played_at desc)")
+        conn.execute("create index if not exists idx_explanations_client on explanations(client_id, updated_at desc)")
+        conn.execute("update history set last_played_at='2026-01-01T01:00:00+00:00' where cache_key='key-one'")
+        conn.execute("update history set last_played_at='2026-01-01T03:00:00+03:00' where cache_key='key-two'")
+
+    for _ in range(2):
+        monkeypatch.setattr(database_service, "_initialized", False)
+        database_service.init_db()
+        with database_service.connection() as conn:
+            indexes = {row["name"] for row in conn.execute("select name from sqlite_master where type='index'")}
+        assert not {"idx_history_client", "idx_explanations_client"} & indexes
+        assert [row["cache_key"] for row in history.list_history("alice")] == ["key-one", "key-two"]
+        assert explain.get_explanation("alice", "explanation-one")["explanation"] == "saved answer"
+        assert explain.get_explanation("alice", "explanation-bob") is None
+
+    assert explain.clear_explanations("alice") == 1
+    assert explain.get_explanation("bob", "explanation-bob")["explanation"] == "private answer"
+    assert history.clear_all_history("alice") == 2
+    assert [row["cache_key"] for row in history.list_history("bob")] == ["key-bob"]
+
+
 @pytest.mark.anyio
 async def test_legacy_model_and_revision_changes_generate_new_audio_and_replay_old(monkeypatch):
     monkeypatch.setattr(settings, "TTS_STORAGE_MODE", "legacy")

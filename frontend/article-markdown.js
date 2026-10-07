@@ -109,10 +109,6 @@ function blocks(lines, depth = 0, collect = null) {
   return output.join('');
 }
 
-export function renderArticleMarkdown(text) {
-  return text ? blocks(String(text).replace(/\r\n?/g, '\n').split('\n')) : '';
-}
-
 /** UTF-16 source offsets, including original CRLF and Markdown syntax, for editing and anchors. */
 export function renderArticleBlocks(text) {
   const source = String(text), lines = source.split(/\r\n|\r|\n/), starts = [0], result = [];

@@ -5,7 +5,8 @@ const dataModule = source => 'data:text/javascript;base64,' + Buffer.from(source
 (async () => {
   const api = dataModule(fs.readFileSync(path.join(__dirname, '../frontend/api.js'), 'utf8'));
   const source = fs.readFileSync(path.join(__dirname, '../frontend/article-markdown.js'), 'utf8').replace("'./api.js'", JSON.stringify(api));
-  const { renderArticleMarkdown, renderArticleBlocks } = await import(dataModule(source));
+  const { renderArticleBlocks } = await import(dataModule(source));
+  const renderArticleMarkdown = text => renderArticleBlocks(text).map(part => part.html).join('');
   const text = '> IP 解决“数据怎么送到一台主机”\n\n---\n\n## 1. 端口号\n\n传输层最重要的抽象之一就是：\n\n```\nIP 地址 + 端口号\n```\n\nIP 定位主机，端口定位进程/服务。\n\n端口号是 16 bit：\n\n```\n0 ~ 65535\n```';
   const html = renderArticleMarkdown(text);
   assert.match(html, /<blockquote>/);assert.match(html, /<hr>/);
@@ -31,7 +32,6 @@ const dataModule = source => 'data:text/javascript;base64,' + Buffer.from(source
   const original = '# 标题\r\n\r\n日本語 **原文**\r\n次の行\r\n\r\n```js\r\n1 < 2\r\n```\r\n';
   const parts = renderArticleBlocks(original);
   assert.deepEqual(parts.map(part => original.slice(part.start, part.end)), ['# 标题', '日本語 **原文**\r\n次の行', '```js\r\n1 < 2\r\n```']);
-  assert.equal(parts.map(part => part.html).join(''), renderArticleMarkdown(original));
   assert.deepEqual(renderArticleBlocks(''), []);
   assert.equal(renderArticleBlocks('- 一\n  - 二\n\n- 三')[0].html, '<ul><li><p>一</p><ul><li><p>二</p></li></ul></li><li><p>三</p></li></ul>');
   console.log('PASS live block ranges preserve original CRLF, nested lists and fenced code');

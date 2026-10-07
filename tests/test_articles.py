@@ -1,5 +1,4 @@
 from app.services import database as database_service
-import time
 from uuid import uuid4
 import json
 
@@ -157,28 +156,3 @@ def test_tombstone_inserted_without_duplicate_update():
         assert row["revision"] == 1
         assert row["title"] == ""
         assert row["content"] == ""
-
-
-def test_article_tombstone_pruning():
-    from datetime import datetime, timezone
-    from app.services.article_service import prune_tombstones
-    client, user_id = account('alice_prune')
-    old_id = str(uuid4())
-    recent_id = str(uuid4())
-    client.delete('/api/articles/' + old_id)
-    client.delete('/api/articles/' + recent_id)
-
-    # Set old_id tombstone updated_at to 10 days ago
-    old_time = datetime.fromtimestamp(time.time() - 10 * 86400, timezone.utc).isoformat()
-    with database_service.connect_database() as conn:
-        conn.execute("update articles set updated_at=? where id=?", (old_time, old_id))
-        conn.commit()
-
-    # Pruning older than 7 days removes old_id but keeps recent_id
-    pruned = prune_tombstones(older_than_seconds=7 * 86400)
-    assert pruned == 1
-
-    with database_service.connect_database() as conn:
-        assert conn.execute("select count(*) from articles where id=?", (old_id,)).fetchone()[0] == 0
-        assert conn.execute("select count(*) from articles where id=?", (recent_id,)).fetchone()[0] == 1
-
