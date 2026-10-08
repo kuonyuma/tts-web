@@ -28,7 +28,7 @@ async def test_gemini_key(payload: TestKeyRequest):
             async with managed_client(create_client(payload.api_key)) as client:
                 interaction = await client.aio.interactions.create(
                     model=settings.GEMINI_TTS_MODEL, input="あ",
-                    response_format={"type": "audio"},
+                    response_format={"type": "audio", "mime_type": "audio/l16", "sample_rate": 24000},
                     generation_config={"speech_config": [{"voice": get_engine("gemini").default_voice}]},
                 )
                 if interaction.output_audio and interaction.output_audio.data:

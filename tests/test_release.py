@@ -390,7 +390,8 @@ def test_real_sdk_errors_are_mapped_without_retries_or_secrets(monkeypatch, capl
 
 
 @pytest.mark.parametrize("mime", ["audio/L16;rate=24000", "audio/l16"])
-def test_real_sdk_success_with_ffmpeg(monkeypatch, mime):
+@pytest.mark.parametrize("endpoint", ["/api/tts", "/api/tts/test-key"])
+def test_real_sdk_requests_pcm_with_ffmpeg(monkeypatch, mime, endpoint):
     async def handler(request):
         body = json.loads(request.content)
         if body.get("response_format"):
@@ -399,11 +400,18 @@ def test_real_sdk_success_with_ffmpeg(monkeypatch, mime):
             content = {"type": "text", "text": "explained"}
         return httpx.Response(200, json={"id": "audit", "status": "completed", "steps": [{"type": "model_output", "content": [content]}]})
 
-    created, _ = mock_gemini_sdk(monkeypatch, handler)
-    response = client.post("/api/tts", json={"text": "Gemini PCM", "engine": "gemini"}, headers={"X-Gemini-Api-Key": "fake-key"})
+    created, requests = mock_gemini_sdk(monkeypatch, handler)
+    payload = {"api_key": "fake-key"} if endpoint.endswith("test-key") else {"text": "Gemini PCM", "engine": "gemini"}
+    response = client.post(endpoint, json=payload, headers={"X-Gemini-Api-Key": "fake-key"})
     assert response.status_code == 200
-    assert response.content.startswith((b"ID3", b"\xff"))
-    assert client.get("/api/tts/" + response.headers["x-cache-key"]).content == response.content
+    body = json.loads(requests[0].content)
+    assert body["response_format"] == {"type": "audio", "mime_type": "audio/l16", "sample_rate": 24000}
+    assert body["generation_config"]["speech_config"] == [{"voice": "Kore"}]
+    if endpoint.endswith("test-key"):
+        assert response.json()["valid"] is True
+    else:
+        assert response.content.startswith((b"ID3", b"\xff"))
+        assert client.get("/api/tts/" + response.headers["x-cache-key"]).content == response.content
     assert all(c._api_client._async_httpx_client.is_closed for c in created)
 
 

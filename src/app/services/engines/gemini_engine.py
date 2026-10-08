@@ -95,7 +95,7 @@ async def pcm_to_mp3(
 
 
 class GeminiTTSEngine(BaseTTSEngine):
-    """Google Gemini 2.5 Flash TTS Engine (High fidelity, BYOK or server key)."""
+    """Google Gemini 3.8 Flash TTS Engine (High fidelity, BYOK or server key)."""
 
     @property
     def engine_id(self) -> str:
@@ -107,7 +107,7 @@ class GeminiTTSEngine(BaseTTSEngine):
 
     @property
     def description(self) -> str:
-        return "Google Gemini 2.5 Flash 语音合成。多语言支持，具备高拟真表现力，支持自带 API Key (BYOK)。"
+        return "Google Gemini 3.8 Flash 语音合成。多语言支持，具备高拟真表现力，支持自带 API Key (BYOK)。"
 
     @property
     def is_free(self) -> bool:
@@ -140,7 +140,7 @@ class GeminiTTSEngine(BaseTTSEngine):
                     interaction = await client.aio.interactions.create(
                         model=settings.GEMINI_TTS_MODEL,
                         input=text,
-                        response_format={"type": "audio"},
+                        response_format={"type": "audio", "mime_type": "audio/l16", "sample_rate": 24000},
                         generation_config={"speech_config": [{"voice": selected_voice}]},
                     )
                     audio = interaction.output_audio
