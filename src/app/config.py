@@ -72,7 +72,7 @@ class Settings:
         or os.getenv("GOOGLE_API_KEY")
         or os.getenv("TTS_API_KEY", "")
     )
-    GEMINI_TTS_MODEL: str = os.getenv("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
+    GEMINI_TTS_MODEL: str = os.getenv("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts")
     GEMINI_TTS_VOICE: str = os.getenv("GEMINI_TTS_VOICE", "Kore")
     DEEPSEEK_API_KEY: str = secret_value("DEEPSEEK_API_KEY")
     ZHIPU_API_KEY: str = secret_value("ZHIPU_API_KEY")

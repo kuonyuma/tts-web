@@ -14,7 +14,7 @@
 
 **TTS Web** is a modern, lightweight, and high-performance Text-to-Speech web application. 
 
-It provides an out-of-the-box dual-engine architecture: completely free and keyless **Microsoft Edge TTS** (supporting Japanese, Chinese, English, etc.), alongside high-fidelity **Google Gemini 2.5 Flash TTS** with a client-side **Bring Your Own Key (BYOK)** security design.
+It provides an out-of-the-box dual-engine architecture: completely free and keyless **Microsoft Edge TTS** (supporting Japanese, Chinese, English, etc.), alongside high-fidelity **Google Gemini 3.8 Flash TTS** with a client-side **Bring Your Own Key (BYOK)** security design.
 
 AI Reading Copilot is a separate, server-funded multi-model feature. Its browser model and
 model-specific reasoning selectors are driven by a backend allowlist; browser-supplied LLM keys are
@@ -35,7 +35,7 @@ for configuration, admin bootstrap, API and data ownership.
 - **Account article library and tabbed reading workspace**: Save long plain-text articles to your login account, edit with automatic saving and protected local drafts, import UTF-8 `.txt`/`.md` files, and fill selected passages into the TTS composer. The existing AI assistant occupies one workspace tab and continues to follow submitted conversation text. See [Article library guide](docs/development/ARTICLES.md).
 - 🎙️ **Dual-Engine & Multi-Voice Support**:
   - **Edge TTS (Default & Free)**: Zero configuration, no API key required. Built-in neural voices (Japanese: Nanami / Keita; Chinese: Xiaoxiao / Yunxi; English: Ava / Andrew).
-  - **Gemini TTS (High Fidelity & BYOK)**: Powered by Google Gemini 2.5 Flash (`gemini-2.5-flash-preview-tts`), offering 8 expressive natural voices (`Kore`, `Aoede`, `Leda`, `Zephyr`, `Puck`, `Charon`, `Fenrir`, `Orus`).
+  - **Gemini TTS (High Fidelity & BYOK)**: Powered by Google Gemini 3.8 Flash (`gemini-3.8-flash-tts`), offering 8 expressive natural voices (`Kore`, `Aoede`, `Leda`, `Zephyr`, `Puck`, `Charon`, `Fenrir`, `Orus`). The Interactions API explicitly requests 24 kHz PCM for MP3 conversion. Override `GEMINI_TTS_MODEL` in `.env` to use another compatible model.
 - 🔑 **BYOK Privacy & Zero-Trust Security**:
   - User API keys are stored exclusively in the browser's `localStorage`.
   - Keys are sent via request headers and held in server memory only during the ongoing request. **Never written to databases, never persisted to disk, and never logged**.
@@ -82,7 +82,7 @@ for configuration, admin bootstrap, API and data ownership.
                    ▼                                  ▼
 ┌──────────────────────────────────────┐ ┌────────────────────────────────┐
 │      EdgeTTSEngine (edge-tts)        │ │  GeminiTTSEngine (google-genai)│
-│ - Free, No Key Required              │ │ - Gemini 2.5 Flash Preview TTS │
+│ - Free, No Key Required              │ │ - Gemini 3.8 Flash TTS         │
 │ - asyncio.Semaphore concurrency queue│ │ - Interactions API             │
 │ - Output: Direct MP3 Stream          │ │ - Output: Base64 PCM 24kHz     │
 │ - Voices: Nanami, Keita, Xiaoxiao... │ │ - async ffmpeg -> MP3 128k   │
