@@ -1,6 +1,6 @@
 import sqlite3
 
-
+# 作用：在传入的 SQLite 连接上执行用户系统相关的 DDL（数据定义语言）和版本增量迁移。
 def migrate_users(conn: sqlite3.Connection) -> None:
     """Add users inside the caller's existing startup migration transaction."""
     conn.execute("""

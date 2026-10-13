@@ -58,12 +58,12 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan
 )
-
+# 挂载三个中间件
 # CORS wraps API limit errors as well as route responses.
-app.add_middleware(RequestLimits)
-app.add_middleware(SecurityHeaders)
-app.add_middleware(
-    CORSMiddleware,
+app.add_middleware(RequestLimits) # 请求速率限制
+app.add_middleware(SecurityHeaders) # 内容安全策略
+app.add_middleware( 
+    CORSMiddleware,  # 处理跨域请求
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
@@ -71,7 +71,7 @@ app.add_middleware(
     expose_headers=["X-Cache", "X-Cache-Key", "X-Engine", "X-Request-ID"],
 )
 
-
+# 请求处理过程中，如果出现没有被业务代码自行处理的 TTSNotFoundError，就调用下面的 audio_not_found 函数。
 @app.exception_handler(RequestValidationError)
 async def invalid_request(request, exc):
     # Pydantic error.input can contain unpaired surrogates or an API key.
