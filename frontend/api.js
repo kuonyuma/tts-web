@@ -50,7 +50,7 @@ export function localizeErrorMessage(detail, fallback = "操作失败，请重�
   const raw = typeof detail === "string" ? detail.trim() : "";
   if (!raw) return fallback;
   const lower = raw.toLowerCase();
-  if (raw.includes("API Key") || raw.includes("API key")) {
+  if ((raw.includes("需要 API Key") && !raw.includes("原音频")) || lower.includes("api key is required") || lower.includes("missing api key")) {
     return "当前功能需要 Gemini API Key，请打开右上角设置进行配置。";
   }
   if (raw.includes("Edge TTS synthesis error") || lower.includes("no audio was received")) {

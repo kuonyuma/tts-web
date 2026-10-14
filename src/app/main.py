@@ -89,7 +89,10 @@ async def provider_failure(request, exc):
     elif isinstance(exc, TTSTimeoutError):
         detail = "语音或讲解服务请求超时，请稍后重试。"
     elif isinstance(exc, TTSUpstreamError):
-        detail = f"上游服务暂时不可用（上游返回 {exc.status_code}），请检查 API Key 或稍后重试。"
+        if getattr(exc, "provider", "").startswith("gemini") and exc.status_code in {400, 401, 403}:
+            detail = f"上游服务暂时不可用（上游返回 {exc.status_code}），请检查 API Key 或稍后重试。"
+        else:
+            detail = f"上游服务暂时不可用（上游返回 {exc.status_code}），请稍后重试。"
     logger.warning("request_id=%s service_error path=%s type=%s upstream_status=%s", getattr(request.state, "request_id", "-"), request.url.path, type(exc).__name__, getattr(exc, "status_code", None))
     return JSONResponse({"detail": detail}, status_code=code)
 

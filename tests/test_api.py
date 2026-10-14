@@ -187,11 +187,27 @@ def test_tts_timeout_error(mock_synthesize):
 @patch("app.services.engines.edge_engine.EdgeTTSEngine.synthesize", new_callable=AsyncMock)
 def test_tts_upstream_error(mock_synthesize):
     """Verify upstream provider error results in 502 Bad Gateway"""
-    mock_synthesize.side_effect = TTSUpstreamError(500)
+    mock_synthesize.side_effect = TTSUpstreamError(500, "edge")
 
     response = client.post("/api/tts", json={"text": "こんにちは"})
     assert response.status_code == 502
     assert "暂时不可用" in response.json()["detail"]
+    assert "API Key" not in response.json()["detail"]
+
+
+@patch("app.services.engines.gemini_engine.GeminiTTSEngine.synthesize", new_callable=AsyncMock)
+def test_tts_gemini_auth_upstream_error(mock_synthesize):
+    """Verify Gemini 401/403 upstream error prompts user to check API Key"""
+    mock_synthesize.side_effect = TTSUpstreamError(403, "gemini")
+
+    response = client.post(
+        "/api/tts",
+        json={"text": "こんにちは", "engine": "gemini"},
+        headers={"X-Gemini-Api-Key": "invalid-key"},
+    )
+    assert response.status_code == 502
+    assert "403" in response.json()["detail"]
+    assert "请检查 API Key" in response.json()["detail"]
 
 
 def test_test_key_empty():

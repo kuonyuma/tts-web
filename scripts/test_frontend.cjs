@@ -40,7 +40,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.write('{'); return;
     }
-    if (mode === 'error') return json({ detail: '上游服务暂时不可用（上游返回 429）。' }, 502);
+    if (mode === 'error') return json({ detail: '上游服务暂时不可用（上游返回 429），请检查 API Key 或稍后重试。' }, 502);
     audioUnavailable = false;
     await new Promise((resolve) => setTimeout(resolve, 30));
     res.writeHead(200, { 'Content-Type': 'audio/wav', 'X-Cache-Key': key });
