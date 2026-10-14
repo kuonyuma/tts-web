@@ -174,7 +174,7 @@ async def test_empty_timeline_is_cached():
 async def test_explain_and_chat_duplicate_requests_do_not_repeat_billing():
     async def generate(**kwargs):
         await asyncio.sleep(0.02)
-        profile, mode = explain.resolve_selection(kwargs.get("model_id"), kwargs.get("mode_id"))
+        profile, mode = kwargs.get("selection") or explain.resolve_selection(kwargs.get("model_id"), kwargs.get("mode_id"))
         return (
             LLMResult("explanation", profile.provider, profile.upstream_model, {}),
             profile.id,

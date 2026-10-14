@@ -27,7 +27,7 @@ const scrollPositions = new Map();
 let leftOpen = !narrow.matches && localStorage.getItem('tts_chat_left_open') !== '0';
 let rightOpen = !narrow.matches && localStorage.getItem('tts_chat_right_open') !== '0';
 
-export function showError(message) {
+function showError(message) {
   $('errorMessage').textContent = message;
   $('errorAlert').style.display = 'flex';
 }

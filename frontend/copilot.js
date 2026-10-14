@@ -43,7 +43,7 @@ let explainOptionsToggleBtn = null;
 let explainOptionsPopover = null;
 let explainOptionsCloseBtn = null;
 
-export function setOptionsPopoverVisible(visible) {
+function setOptionsPopoverVisible(visible) {
   if (!explainOptionsPopover) return;
   if (visible) {
     explainOptionsPopover.removeAttribute("hidden");
@@ -79,7 +79,7 @@ export function getCurrentExplainKey() {
   return currentExplainKey;
 }
 
-export function clearExplainSession() {
+function clearExplainSession() {
   invalidateExplainSession();
   currentExplainKey = null;
   currentExplainText = null;
@@ -102,11 +102,11 @@ export function resetExplanation() {
   renderExplainEmpty();
 }
 
-export function selectedCopilotModel() {
+function selectedCopilotModel() {
   return availableCopilotModels.find((model) => model.id === explainModel) || null;
 }
 
-export function populateReasoningModes(preferredMode = "") {
+function populateReasoningModes(preferredMode = "") {
   const model = selectedCopilotModel();
   if (!explainThinkingSelect) return;
   explainThinkingSelect.replaceChildren();
@@ -179,7 +179,7 @@ function getExplainHeaders() {
   };
 }
 
-export function updateExplainLangBadge() {
+function updateExplainLangBadge() {
   if (explainSection) {
     explainSection.setAttribute("data-lang", explainLang);
   }
@@ -188,7 +188,7 @@ export function updateExplainLangBadge() {
   }
 }
 
-export function updateExplainInputState() {
+function updateExplainInputState() {
   const busy = explainLoading || chatPending || !explainModel || !currentExplainText;
   if (explainSendBtn) explainSendBtn.disabled = busy;
   if (explainChatInput) explainChatInput.disabled = busy;
@@ -227,13 +227,13 @@ export function renderExplainEmpty() {
   }
 }
 
-export function hideExplainSection() {
+function hideExplainSection() {
   invalidateExplainSession();
   setOptionsPopoverVisible(false);
   renderExplainEmpty();
 }
 
-export function formatInlineMarkdown(text) {
+function formatInlineMarkdown(text) {
   let s = escapeHtml(text);
   s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
@@ -243,7 +243,7 @@ export function formatInlineMarkdown(text) {
   return s;
 }
 
-export function renderMarkdown(rawText) {
+function renderMarkdown(rawText) {
   if (!rawText) return "";
   const lines = rawText.split("\n");
   const output = [];
@@ -327,7 +327,7 @@ export function renderMarkdown(rawText) {
   return output.join("");
 }
 
-export async function copyToClipboard(text) {
+async function copyToClipboard(text) {
   if (!text) return false;
   if (navigator.clipboard && window.isSecureContext) {
     try {
@@ -359,7 +359,7 @@ const COPY_ICON_SVG = `<svg class="action-icon icon-copy" width="13" height="13"
 const CHECK_ICON_SVG = `<svg class="action-icon icon-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
 const RETRY_ICON_SVG = `<svg class="action-icon icon-retry" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg>`;
 
-export function appendExplainBubble(role, content, options = {}) {
+function appendExplainBubble(role, content, options = {}) {
   if (!explainMessages) return null;
   const div = document.createElement("div");
   div.className = "explain-msg " + (role === "user" ? "explain-msg-user" : "explain-msg-assistant");
@@ -435,7 +435,7 @@ export function appendExplainBubble(role, content, options = {}) {
   return div;
 }
 
-export function cancelExplainReveal() {
+function cancelExplainReveal() {
   if (!activeExplainReveal) return;
   if (explainRevealFrame !== null) cancelAnimationFrame(explainRevealFrame);
   activeExplainReveal.element.classList.remove("is-streaming");
@@ -448,7 +448,7 @@ export function cancelExplainReveal() {
   resolve();
 }
 
-export function streamExplainBubble(content, generation = explainGeneration, options = {}) {
+function streamExplainBubble(content, generation = explainGeneration, options = {}) {
   if (generation !== explainGeneration) return Promise.resolve();
   cancelExplainReveal();
   const div = appendExplainBubble("assistant", content, { ...options, pendingStream: true });
@@ -529,7 +529,7 @@ export function streamExplainBubble(content, generation = explainGeneration, opt
   });
 }
 
-export async function renderExplainMessages(explanation, messages, options = {}) {
+async function renderExplainMessages(explanation, messages, options = {}) {
   const generation = options.generation ?? explainGeneration;
   if (!explainMessages || generation !== explainGeneration) return;
   cancelExplainReveal();
@@ -559,7 +559,7 @@ export async function renderExplainMessages(explanation, messages, options = {})
   });
 }
 
-export function showExplainLoading() {
+function showExplainLoading() {
   if (!explainMessages) return;
   cancelExplainReveal();
   explainMessages.innerHTML = "";
@@ -570,6 +570,16 @@ export function showExplainLoading() {
   dots.className = "explain-loading-dots";
   div.appendChild(dots);
   explainMessages.appendChild(div);
+}
+
+async function readExplainError(response, fallback) {
+  try {
+    const data = await response.json();
+    if (data && data.detail) return localizeErrorMessage(data.detail, fallback);
+  } catch {
+    // keep default message
+  }
+  return fallback;
 }
 
 export async function requestExplanation(text, opts = {}) {
@@ -604,14 +614,7 @@ export async function requestExplanation(text, opts = {}) {
     }, getCopilotRequestTimeoutMs());
     if (generation !== explainGeneration) return;
     if (!response.ok) {
-      let detail = "解说生成失败，请重试。";
-      try {
-        const data = await response.json();
-        if (data && data.detail) detail = localizeErrorMessage(data.detail, detail);
-      } catch {
-        // keep default message
-      }
-      throw new Error(localizeErrorMessage(detail, "解说生成失败，请重试。"));
+      throw new Error(await readExplainError(response, "解说生成失败，请重试。"));
     }
     const data = await response.json();
     if (generation !== explainGeneration) return;
@@ -669,14 +672,7 @@ export async function sendExplainChat(customMessage = null, options = {}) {
     }, getCopilotRequestTimeoutMs());
     if (!ownsSession()) return;
     if (!response.ok) {
-      let detail = "发送失败，请重试。";
-      try {
-        const data = await response.json();
-        if (data && data.detail) detail = localizeErrorMessage(data.detail, detail);
-      } catch {
-        // keep default message
-      }
-      throw new Error(localizeErrorMessage(detail, "发送失败，请重试。"));
+      throw new Error(await readExplainError(response, "发送失败，请重试。"));
     }
     const data = await response.json();
     if (!ownsSession()) return;

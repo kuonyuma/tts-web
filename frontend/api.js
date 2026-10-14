@@ -9,7 +9,7 @@ let accountScope = null;
 
 export function setAccountScope(scope) { accountScope = scope; }
 
-export function getCsrfToken() {
+function getCsrfToken() {
   if (typeof document === 'undefined') return '';
   return document.cookie.split('; ').find(value => value.startsWith('tts_csrf='))?.slice(9) || '';
 }

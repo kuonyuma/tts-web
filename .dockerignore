@@ -32,11 +32,16 @@ secrets
 *.pem
 *.key
 
-# IDEs & System Files
+# IDEs, Docs & Dev Files
 .idea
 .vscode
 .DS_Store
 Thumbs.db
 README.md
-README_zh.md
-DEVELOPMENT.md
+AGENTS.md
+docs
+tests
+scripts
+node_modules
+package.json
+package-lock.json

@@ -11,7 +11,7 @@ from app.services.user_service import UsernameTakenError, register_user
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
-
+# 注册新账号
 @router.post(
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED,
     summary="Create a local account",
@@ -22,20 +22,23 @@ def register(body: RegisterUserRequest, request: Request, background: Background
         raise HTTPException(422, "账号模式需要提供邮箱。")
     auth_request_guard(request)
     try:
+        # 正式创建账户
         user = register_user(body)
     except UsernameTakenError:
         raise HTTPException(status.HTTP_409_CONFLICT, "用户名或邮箱已存在。") from None
+    
     if user.email and mail_enabled():
         queue_email(background, user.email, "verify")
     return UserResponse.model_validate(user)
 
-
+# 查看用户列表
 @router.get("", response_model=list[UserResponse])
-def list_users(limit: int = Query(default=100, ge=1, le=200), offset: int = Query(default=0, ge=0),
-               _context: auth.AuthContext = Depends(admin_account)):
+def list_users(
+    limit: int = Query(default=100, ge=1, le=200), offset: int = Query(default=0, ge=0),
+    _context: auth.AuthContext = Depends(admin_account)):
     return [UserResponse.model_validate(user) for user in auth.list_users(limit, offset)]
 
-
+# 修改用户状态/角色
 @router.patch("/{user_id}", response_model=UserResponse)
 def update_user(user_id: int, body: UserAdminUpdate, request: Request,
                 context: auth.AuthContext = Depends(admin_account)):

@@ -86,9 +86,16 @@ def _development_loopback_origin(request: Request, origin: str) -> bool:
 
 
 def check_origin(request: Request) -> None:
+
     origin = request.headers.get("origin")
+    # 白名单检验
     if origin and origin != settings.PUBLIC_BASE_URL and not _development_loopback_origin(request, origin):
         raise AuthError(403, "请求来源无效。")
+    """
+    same-origin：同源（协议、域名、端口完全一致）。
+    same-site：同站（子域名不同，但主域名一致）。
+    cross-site：跨站（完全不同的第三方网站发起的请求）
+    """
     if request.headers.get("sec-fetch-site") == "cross-site":
         raise AuthError(403, "请求来源无效。")
 
@@ -98,10 +105,12 @@ def rate_limit(request: Request) -> None:
 
     now = time.time()
     key = digest(f"auth:{resolve_client_ip(request.scope)}:{request.url.path}:{int(now // 60)}")
+
     with account_connection(write=True) as conn:
         conn.execute("delete from auth_rate_limits where expires_at <= ?", (now,))
         row = conn.execute("select attempts from auth_rate_limits where key_hash=?", (key,)).fetchone()
-        if row and row["attempts"] >= settings.AUTH_ATTEMPTS_PER_MINUTE:
+
+        if row and row["attempts"] >= settings.AUTH_ATTEMPTS_PER_MINUTE: # 10
             raise AuthError(429, "账号请求过于频繁，请稍后重试。")
         conn.execute(
             "insert into auth_rate_limits (key_hash, attempts, expires_at) values (?, 1, ?) "
@@ -110,10 +119,16 @@ def rate_limit(request: Request) -> None:
 
 
 def create_session(user_id: int, *, expected_password_hash: str | None = None) -> tuple[User, str, str]:
-    key = signing_key()
-    now = int(time.time())
-    expires = now + settings.AUTH_SESSION_SECONDS
-    sid, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+    """
+    负责生成安全凭证，并在服务端数据库中登记会话。
+    采用了 “JWT 访问令牌 + 服务端可撤销会话（Stateful Session）+ 数据库脱敏存储 + CSRF 令牌” 的高安全性混合架构。
+    """
+    key = signing_key() # 获取用于签发 JWT 的 HS256 服务端密钥。
+    now = int(time.time()) 
+    expires = now + settings.AUTH_SESSION_SECONDS # 会话过期时间戳（当前时间 + 系统配置的会话有效秒数）。
+
+    sid = secrets.token_urlsafe(32) 
+    csrf =  secrets.token_urlsafe(32)
     with account_connection(write=True) as conn:
         row = conn.execute("select * from users where id=?", (user_id,)).fetchone()
         if not row or not row["is_active"] or (expected_password_hash is not None and row["password_hash"] != expected_password_hash):
@@ -124,6 +139,7 @@ def create_session(user_id: int, *, expected_password_hash: str | None = None) -
             "insert into auth_sessions (sid_hash, user_id, csrf_hash, expires_at, created_at) values (?, ?, ?, ?, ?)",
             (digest(sid), user.id, digest(csrf), expires, utc_timestamp()),
         )
+    # 签发 JWT
     token = jwt.encode({
         "sub": str(user.id), "jti": sid, "iat": now, "nbf": now, "exp": expires,
         "iss": JWT_ISSUER, "aud": JWT_AUDIENCE, "type": "access",
@@ -132,16 +148,21 @@ def create_session(user_id: int, *, expected_password_hash: str | None = None) -
 
 
 def login(identity: str, password: str) -> tuple[User, str, str]:
+    # 查询账户
     with account_connection() as conn:
         row = conn.execute("select * from users where username=? or email=?", (identity, identity)).fetchone()
+    # 验证密码
     valid = verify_password(row["password_hash"] if row else None, password)
+    # row["is_active"]账号是否被禁用
     if not row or not valid or not row["is_active"]:
-        reason = "identity_not_found" if not row else "account_inactive" if not row["is_active"] else "password_mismatch"
+        # 对内精确区分
+        reason = "identity_not_found" if not row else ("account_inactive" if not row["is_active"] else "password_mismatch")
         logger.warning("account_login_rejected reason=%s", reason)
+        # 对外的模糊提示
         raise AuthError(401, "账号或密码错误。")
     return create_session(row["id"], expected_password_hash=row["password_hash"])
 
-
+# 判断是否登录
 def has_credentials(request: Request) -> bool:
     return bool(request.headers.get("authorization") or request.cookies.get(SESSION_COOKIE))
 

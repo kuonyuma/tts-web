@@ -387,17 +387,7 @@ body {
 }
 
 /* ── Responsive Layout ────────────────────────────────────────── */
-@media (max-width: 960px) {
-  body {
-    padding: 16px 12px;
-  }
-}
-
 @media (max-width: 640px) {
-  body {
-    padding: 12px 8px;
-  }
-
   .modal-dialog,
   .modal-card {
     max-height: 90vh;

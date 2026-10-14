@@ -1,6 +1,6 @@
 [project]
 name = "japanese-tts-web"
-version = "0.1.0"
+version = "0.2.0"
 description = "Simple, high-quality Japanese Text-to-Speech Web application"
 readme = "README.md"
 requires-python = ">=3.13"

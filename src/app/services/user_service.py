@@ -42,7 +42,10 @@ def register_user(request: RegisterUserRequest) -> User:
     """Create an account; SQL storage stays here, outside the HTTP router."""
     try:
         with database.connection() as conn:
-            if conn.execute("select 1 from users where username = ? or email = ?", (request.username, request.email)).fetchone():
+            if conn.execute(
+                "select 1 from users where username = ? or email = ?",
+                (request.username, request.email)
+            ).fetchone():
                 raise UsernameTakenError()
             # SELECT does not start a SQLite write transaction; hash before INSERT.
             password_hash = hash_password(request.password.get_secret_value())

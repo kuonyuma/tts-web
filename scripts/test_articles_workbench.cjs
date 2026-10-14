@@ -1,10 +1,8 @@
 // Native browser UI tests; all API responses are local fixtures, never real providers.
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const http = require('node:http');
+const { serveFrontend } = require('./frontend_test_server.cjs');
 const { launchBrowser } = require('./browser_test_helper.cjs');
-const root = path.resolve(__dirname, '..');
 const ids = ['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222'];
 const now = '2026-10-03T10:00:00+00:00';
 const articles = new Map(ids.map((id,i)=>[id,{id,title:i?'雨の日の手紙':'東京の小さな喫茶店',content:('日本語の文章。\n次の行です。\n').repeat(70),revision:1,created_at:now,updated_at:now}]));
@@ -47,11 +45,7 @@ const server = http.createServer(async (req,res)=>{
       Object.assign(a,body,{revision:a.revision+1,updated_at:new Date().toISOString()});return json(a);
     }
   }
-  const file=path.resolve(root,'frontend',url.pathname==='/'?'index.html':url.pathname.slice(1));
-  if(file.startsWith(path.join(root,'frontend')+path.sep)&&fs.existsSync(file)&&fs.statSync(file).isFile()){
-    res.writeHead(200,{'Content-Type':{'.js':'text/javascript','.html':'text/html','.css':'text/css'}[path.extname(file)]||'text/plain'});return res.end(fs.readFileSync(file));
-  }
-  json({detail:'missing'},404);
+  serveFrontend(res, url.pathname);
 });
 let browser;
 const consoleErrors=[];
@@ -187,10 +181,7 @@ const consoleErrors=[];
     assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sidebar-right-width').trim()"),'355px');
     await evaluate("document.getElementById('rightResizer').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))");
     assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sidebar-right-width').trim()"),'345px');
-    const shotDir=path.join(root,'docs/review/articles-workbench');fs.mkdirSync(shotDir,{recursive:true});
-    async function screenshot(name){const image=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(shotDir,name+'.png'),Buffer.from(image.data,'base64'));}
     await select('library');await wait("document.querySelectorAll('[data-article-open]').length===3");
-    await screenshot('library-light');
     await select(ids[0]);
     const readingText='> IP 解决“数据怎么送到一台主机”，端口解决“送给这台主机上的哪个进程”，TCP/UDP 解决“两个进程之间按什么规则传输数据”。\n\n---\n\n## 1. 端口号\n\n传输层最重要的抽象之一就是：\n\n```\nIP 地址 + 端口号\n```\n\nIP 定位主机，端口定位进程/服务。\n\n端口号是 16 bit：\n\n```\n0 ~ 65535\n```\n\n## 読書ノート\n\n日本語の一行目。\n二行目もそのまま読む。\n\n- **原文を保存**：編集は自動保存\n- `選択した文章`を音声入力へ\n\n';
     await input(ids[0],'.article-title-input','端口与传输层 · 阅读笔记');
@@ -210,7 +201,6 @@ const consoleErrors=[];
     await wait(`JSON.parse(localStorage.getItem('tts_workbench_v1:account_1')).positions['${ids[0]}'].liveScroll>0`);
     await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     const liveAnchor=await evaluate(`articleTest.editor('${ids[0]}').anchor(false)`);
-    await screenshot('live-light');
     await evaluate("document.body.dataset.ready='reloading'");await send('Page.reload');
     await wait("document.body?.dataset.ready==='true'");
     await wait(`document.getElementById('article-panel-${ids[0]}')?.hidden===false`);
@@ -262,23 +252,19 @@ const consoleErrors=[];
     assert.equal(await evaluate(`document.getElementById('article-panel-${ids[0]}').querySelector('.article-fill').disabled`),true);
     await evaluate(`getSelection().removeAllRanges();document.getElementById('article-panel-${ids[0]}').querySelector('.article-preview').scrollTop=0`);
     console.log('PASS reading follows source position and retains scroll across tabs and reload; rendered selection preserves newlines');
-    await screenshot('desktop-light');
     await evaluate("document.getElementById('settingsBtn').click();document.querySelector('[data-theme=\"dark\"]').click();document.getElementById('modalCloseBtn').click()");
-    await screenshot('desktop-dark');
     await evaluate(`document.getElementById('article-panel-${ids[0]}').querySelector('.article-mode-live').click()`);
-    await screenshot('live-dark');
-    await select('ai');await screenshot('ai-dark');await select(ids[0]);
+    await select('ai');await select(ids[0]);
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
     await evaluate("document.getElementById('aiPanelBtn').click();document.getElementById('workspaceAddBtn').click()");
     await wait("document.getElementById('chatMain').inert===true");
     await select(ids[0]);
     assert.equal(await evaluate("document.getElementById('explainSection').hidden"),false);
     assert.equal(await evaluate("getComputedStyle(document.getElementById('rightResizer')).display"),'none');
-    await screenshot('mobile-dark');
     await evaluate("document.getElementById('aiCloseBtn').click()");
     assert.equal(await evaluate("document.getElementById('chatMain').inert"),false);
     assert.equal(await evaluate("document.documentElement.scrollWidth<=390"),true);
-    console.log('PASS theme, width reset and narrow drawer layout; screenshots saved');
+    console.log('PASS theme, width reset and narrow drawer layout');
     assert.equal(await evaluate(`(async()=>{const saved=sessionStorage.getItem('tts_article_draft_owner');const {claimDraftOwner}=await import('/article-drafts.js');const duplicate=await claimDraftOwner();const unique=duplicate.owner!==saved;duplicate.dispose();sessionStorage.setItem('tts_article_draft_owner',saved);return unique;})()`),true);
     console.log('PASS duplicated browser tab session identity receives an isolated draft owner');
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:960,deviceScaleFactor:1,mobile:false});

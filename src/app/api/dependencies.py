@@ -8,7 +8,7 @@ from starlette.concurrency import run_in_threadpool
 from app.config import settings
 from app.validation import normalize_client_id
 
-
+# 校验并格式化来自前端请求头的客户端 ID（X-Client-ID）
 def validate_client_id(client_id: str | None) -> str:
     try:
         value = normalize_client_id(client_id)
@@ -18,7 +18,7 @@ def validate_client_id(client_id: str | None) -> str:
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
 
-
+# 供 /api/history 和 /api/tts 确定当前请求的数据归属者 ID（用于音频历史隔离、缓存隔离）。
 async def require_tts_identity(
     x_client_id: Annotated[str | None, Header(alias="X-Client-ID")] = None,
     x_authenticated_user: Annotated[str | None, Header(alias="X-Authenticated-User", max_length=512)] = None,
@@ -27,9 +27,13 @@ async def require_tts_identity(
 ) -> str:
     # Private mode never falls back to a browser-supplied client identifier,
     # even in development. Tests use the same proxy contract as production.
-    return await _resolve_identity(request, x_client_id, x_authenticated_user, x_auth_proxy_secret,
-                                   browser_mode=settings.TTS_STORAGE_MODE == "legacy")
-
+    return await _resolve_identity(
+        request,
+        x_client_id,
+        x_authenticated_user,
+        x_auth_proxy_secret,
+        browser_mode=settings.TTS_STORAGE_MODE == "legacy"
+    )
 
 async def _resolve_identity(
     request: Request | None, client_id: str | None, user: str | None, secret: str | None,
@@ -62,7 +66,7 @@ def trusted_identity(
         raise HTTPException(401, "身份信息无效。")
     return hashlib.sha256(f"copilot:{identity}".encode("utf-8")).hexdigest()
 
-
+# 供 /api/explain（AI 讲解模块）解析调用者身份，用于配额限流（Rate Limit）和讲解记录归属。
 async def require_copilot_identity(
     x_client_id: Annotated[str | None, Header(alias="X-Client-ID", max_length=128)] = None,
     x_authenticated_user: Annotated[
@@ -84,7 +88,7 @@ async def require_copilot_identity(
         missing_auth_detail="需要登录后才能使用 AI 讲解。",
     )
 
-
+# 作用：在 TTS 请求时，安全确定由哪个 Gemini API Key 发起合成请求。
 async def gemini_request_key(
     x_gemini_api_key: Annotated[str | None, Header(alias="X-Gemini-Api-Key", max_length=256)] = None,
     x_server_key_token: Annotated[str | None, Header(alias="X-Server-Key-Token", max_length=256)] = None,
@@ -102,19 +106,19 @@ async def gemini_request_key(
     # Knowing a client UUID never grants access to a paid server credential.
     return None
 
-
+# 作为全局守卫，直接挂载在 /api/auth 路由组上，保护登录、注册、修改密码等敏感接口。
 def auth_request_guard(request: Request) -> None:
     from app.services import auth_service as auth
-    if request.method not in auth.SAFE_METHODS:
+    if request.method not in auth.SAFE_METHODS:# auth.SAFE_METHODS == {"GET", "HEAD", "OPTIONS"}
         auth.check_origin(request)
         auth.rate_limit(request)
 
-
+# 解析当前已登录用户上下文。
 def current_account(request: Request):
     from app.services import auth_service as auth
     return auth.authenticate(request)
 
-
+# 基于角色的权限控制（RBAC），保护仅管理员可调用的路由（例如 /api/users）。
 def admin_account(context=Depends(current_account)):
     from app.services import auth_service as auth
     if context.user.role != "admin":

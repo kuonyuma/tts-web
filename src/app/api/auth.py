@@ -18,15 +18,23 @@ def _secure_cookies() -> bool:
 
 def set_login_cookies(response: Response, token: str, csrf: str) -> None:
     secure = _secure_cookies()
-    response.set_cookie(auth.SESSION_COOKIE, token, max_age=settings.AUTH_SESSION_SECONDS,
-                        httponly=True, secure=secure, samesite="lax", path="/")
-    response.set_cookie(auth.CSRF_COOKIE, csrf, max_age=settings.AUTH_SESSION_SECONDS,
-                        httponly=False, secure=secure, samesite="lax", path="/")
+    response.set_cookie(
+        auth.SESSION_COOKIE,
+        token,
+        max_age=settings.AUTH_SESSION_SECONDS,
+        httponly=True, secure=secure, samesite="lax", path="/"
+    )
+    response.set_cookie(
+        auth.CSRF_COOKIE,
+        csrf,
+        max_age=settings.AUTH_SESSION_SECONDS,
+        httponly=False, secure=secure, samesite="lax", path="/"
+    )
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"], dependencies=[Depends(auth_request_guard)])
 
-
+# 向前端提供系统当前的认证功能配置。
 @router.get("/config")
 def account_config():
     return {
@@ -35,19 +43,20 @@ def account_config():
         "oauth_providers": ["github"] if settings.GITHUB_CLIENT_ID and settings.GITHUB_CLIENT_SECRET else [],
     }
 
-
+# 登录
 @router.post("/login", response_model=LoginResponse)
 def login(request: LoginRequest, response: Response):
+    # token 是jwt字符串，csrf是随机字符串
     user, token, csrf = auth.login(request.identity, request.password.get_secret_value())
     set_login_cookies(response, token, csrf)
     return LoginResponse(access_token=token, expires_in=settings.AUTH_SESSION_SECONDS, user=UserResponse.model_validate(user))
 
-
+# 获取当前登录用户的个人信息
 @router.get("/me", response_model=UserResponse)
 def me(context: auth.AuthContext = Depends(current_account)):
     return UserResponse.model_validate(context.user)
 
-
+# 退出登录并注销会话。
 @router.post("/logout", status_code=204)
 def logout(response: Response, context: auth.AuthContext = Depends(current_account)):
     auth.logout(context)
@@ -60,36 +69,39 @@ def queue_email(background: BackgroundTasks, email: str, purpose: str) -> None:
     if token:
         background.add_task(send_account_link, email, token, purpose)
 
-
+# 请求发送邮箱验证邮件
 @router.post("/email/verification", status_code=202)
 def request_verification(body: EmailRequest, background: BackgroundTasks):
     require_mail()
     queue_email(background, body.email, "verify")
     return {"detail": "如果邮箱可以接收验证邮件，我们将发送链接，请稍候并检查垃圾邮件。"}
 
-
+# 用途：激活/验证邮箱。
 @router.post("/email/verify")
 def verify_email(body: TokenRequest):
     tokens.verify_email(body.token.get_secret_value())
     return {"detail": "邮箱已验证。"}
 
-
+# 用途：已登录用户更改绑定的邮箱地址。
 @router.put("/email", response_model=UserResponse)
-def change_email(body: EmailChangeRequest, background: BackgroundTasks,
-                 context: auth.AuthContext = Depends(current_account)):
+def change_email(
+    body: EmailChangeRequest,
+    background: BackgroundTasks,
+    context: auth.AuthContext = Depends(current_account)
+):
     require_mail()
     user = tokens.change_email(context.user, body.email, body.password.get_secret_value() if body.password else None)
     queue_email(background, body.email, "verify")
     return UserResponse.model_validate(user)
 
-
+# 用途：发起“忘记密码”重置申请。
 @router.post("/password/forgot", status_code=202)
 def forgot_password(body: EmailRequest, background: BackgroundTasks):
     require_mail()
     queue_email(background, body.email, "reset")
     return {"detail": "如果邮箱对应可恢复的账号，我们将发送重置链接，请稍候并检查垃圾邮件。"}
 
-
+# 用途：凭重置邮件中的 Token 设置新密码。
 @router.post("/password/reset")
 def reset_password(body: ResetPasswordRequest, response: Response):
     tokens.reset_password(body.token.get_secret_value(), body.password.get_secret_value())
@@ -103,7 +115,7 @@ def set_oauth_cookie(response: Response, browser: str) -> None:
                         secure=_secure_cookies(),
                         path="/api/auth/oauth/github")
 
-
+# 用途：发起 GitHub 快捷登录。
 @router.get("/oauth/github/start")
 def github_start(request: Request):
     auth.rate_limit(request)
@@ -112,7 +124,7 @@ def github_start(request: Request):
     set_oauth_cookie(response, browser)
     return response
 
-
+# 用途：将当前已登录的本站账号与 GitHub 账号进行绑定。
 @router.post("/oauth/github/link")
 def github_link(response: Response, context: auth.AuthContext = Depends(current_account)):
     if not context.cookie_authenticated:
@@ -121,11 +133,16 @@ def github_link(response: Response, context: auth.AuthContext = Depends(current_
     set_oauth_cookie(response, browser)
     return {"url": url}
 
-
+# 用途：接收 GitHub 授权完成后的浏览器回调。
 @router.get("/oauth/github/callback")
-async def github_callback(request: Request, state: str = Query(min_length=16, max_length=256, pattern=r"^[A-Za-z0-9_-]+$"),
-                          code: str | None = Query(default=None, min_length=1, max_length=1024),
-                          error: str | None = Query(default=None, max_length=128)):
+async def github_callback(
+    request: Request, state: str = Query(
+        min_length=16,
+        max_length=256,
+        pattern=r"^[A-Za-z0-9_-]+$"
+    ),
+    code: str | None = Query(default=None, min_length=1, max_length=1024),
+    error: str | None = Query(default=None, max_length=128)):
     oauth.require_github()
     await run_in_threadpool(auth.rate_limit, request)
     flow = await run_in_threadpool(oauth.consume_state, state, request.cookies.get(oauth.OAUTH_COOKIE))

@@ -1,10 +1,8 @@
 // Offline browser contract tests for account forms; backend flows use pytest.
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const http = require('node:http');
+const { serveFrontend } = require('./frontend_test_server.cjs');
 const { launchBrowser } = require('./browser_test_helper.cjs');
-const root = path.resolve(__dirname, '..', 'frontend');
 const requests = [];
 let loggedIn = false;
 const user = { id: 7, username: 'alice', email: 'alice@example.com', email_verified: false,
@@ -32,10 +30,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/auth/password/reset') return json({ detail: '密码已重置。' });
     return json({ detail: 'missing' }, 404);
   }
-  const file = path.resolve(root, pathname.slice(1));
-  if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { 'Content-Type': { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[path.extname(file)] || 'text/plain' });
-  res.end(fs.readFileSync(file));
+  if (pathname === '/') { res.writeHead(404); return res.end(); }
+  serveFrontend(res, pathname);
 });
 let browser;
 (async () => {
@@ -46,10 +42,6 @@ let browser;
     await browser.send('Page.enable'); await browser.send('Runtime.enable');
     await browser.send('Page.navigate', { url });
     await browser.wait("document.body.dataset.accountReady === 'true'");
-    await browser.evaluate("document.querySelector('[data-view=\"register\"]').click();");
-    const shots = path.join(__dirname, '..', 'docs', 'screenshots');
-    fs.mkdirSync(shots, { recursive: true });
-    fs.writeFileSync(path.join(shots, 'accounts-register.png'), Buffer.from((await browser.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })).data, 'base64'));
     await browser.evaluate(`document.querySelector('[data-view="register"]').click();
       document.getElementById('registerUsername').value='alice';document.getElementById('registerEmail').value='alice@example.com';
       document.getElementById('registerPassword').value='example-password';document.getElementById('registerConfirm').value='mismatch';
@@ -78,7 +70,6 @@ let browser;
     assert.equal(requests.find(r => r.pathname === '/api/auth/password/reset').body.token, 'r'.repeat(43));
     await browser.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     assert(await browser.evaluate('document.documentElement.scrollWidth <= innerWidth'));
-    fs.writeFileSync(path.join(shots, 'accounts-mobile.png'), Buffer.from((await browser.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })).data, 'base64'));
     assert.deepEqual(browser.exceptions, []);
     console.log('PASS registration/confirmation, login, no JWT persistence, verification, CSRF logout, reset fragment removal and mobile layout');
   } finally {
