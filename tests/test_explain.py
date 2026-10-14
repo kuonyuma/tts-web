@@ -70,9 +70,11 @@ def test_explain_success_miss(mock_generate, _mock_get, mock_save):
     assert data["model_id"] == "deepseek-flash"
     assert data["mode_id"] == "direct"
     assert len(data["explain_key"]) == 64
-    assert {key: mock_generate.call_args.kwargs[key] for key in ("text", "lang", "model_id", "mode_id")} == {
-        "text": "Hello.", "lang": "zh", "model_id": "deepseek-flash", "mode_id": "direct"
+    assert {key: mock_generate.call_args.kwargs[key] for key in ("text", "lang")} == {
+        "text": "Hello.", "lang": "zh"
     }
+    profile, mode = mock_generate.call_args.kwargs["selection"]
+    assert (profile.id, mode.id) == ("deepseek-flash", "direct")
     assert "api_key" not in mock_generate.call_args.kwargs
     assert mock_save.call_args.kwargs["provider"] == "deepseek"
 
@@ -167,8 +169,8 @@ def test_chat_uses_stored_model(mock_get, mock_answer, mock_append):
     )
     assert response.status_code == 200
     assert response.json()["answer"] == "回答"
-    assert mock_answer.call_args.kwargs["model_id"] == "deepseek-flash"
-    assert mock_answer.call_args.kwargs["mode_id"] == "low"
+    profile, mode = mock_answer.call_args.kwargs["selection"]
+    assert (profile.id, mode.id) == ("deepseek-flash", "low")
 
 
 def test_chat_deduplication_includes_generation_mode():

@@ -1,13 +1,10 @@
 // Offline browser regressions for request ownership and deadlines. No live providers.
 // Node 22+ and Chrome/Edge are required; CHROME_PATH can select the executable.
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const http = require('node:http');
 const { serveFrontend } = require('./frontend_test_server.cjs');
 const { launchBrowser, delay } = require('./browser_test_helper.cjs');
 
-const root = path.resolve(__dirname, '..');
 const keys = { A: 'a'.repeat(64), B: 'b'.repeat(64) };
 let catalogTimeout = 300;
 let stallCatalog = false;
@@ -180,40 +177,36 @@ let browser;
 
     await evaluate("select(firstId);change('explainToggle',true);take('/api/explain').resolve(json({explain_key:'demo',explanation:'### 中文翻译\\n在东京的一家小咖啡店里，悠闲地读书。\\n\\n### 语法笔记\\n**で · 动作发生的场所**\\n\\n「喫茶店で」说明读书发生的地点。\\n\\n**ゆっくり · 慢慢地、从容地**\\n\\n修饰后面的动词「読みます」，表达放松、悠闲的状态。\\n\\n### 重点词汇\\n- **喫茶店（きっさてん）**：咖啡店\\n- **読む（よむ）**：阅读',cached:true,messages:[]}));");
     await wait("document.getElementById('explainMessages').textContent.includes('中文翻译')");
-    const screenshotDir=path.join(root,'docs/screenshots');fs.mkdirSync(screenshotDir,{recursive:true});
     const settlePanels=()=>evaluate("Promise.all([...document.querySelectorAll('.conversation-sidebar,.ai-sidebar,.drawer-backdrop')].flatMap(el=>el.getAnimations()).map(a=>a.finished.catch(()=>{})))");
-    const capture=async name=>{await settlePanels();const result=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(screenshotDir,name),Buffer.from(result.data,'base64'));};
     // Load both audio controls for the visual fixture without external providers.
     await evaluate("document.querySelectorAll('.audio-action').forEach(b=>b.click());requests.filter(r=>r.path.startsWith('/api/tts/')).forEach(r=>r.resolve(new Response(wav,{headers:{'Content-Type':'audio/wav'}})));requests=requests.filter(r=>!r.path.startsWith('/api/tts/'));document.getElementById('textInput').value='';document.getElementById('textInput').dispatchEvent(new Event('input'));");
     await wait("[...document.querySelectorAll('audio')].every(a=>a.readyState>=2)");
     await evaluate("document.querySelectorAll('audio').forEach(a=>a.pause())");
-    await capture('chat-desktop.png');
+    await settlePanels();
     const width=await evaluate("document.getElementById('chatMain').clientWidth");
     const explanationCount=await evaluate("requests.filter(r=>r.path==='/api/explain').length");
     await evaluate("click('historyBtn');click('aiPanelBtn');");
     await settlePanels();
     assert(await evaluate("document.getElementById('chatMain').clientWidth")>width);
     assert.equal(await evaluate("requests.filter(r=>r.path==='/api/explain').length"), explanationCount);
-    await capture('chat-collapsed.png');
     await evaluate("click('historyBtn');click('aiPanelBtn');");
     await evaluate("(async()=>{const settings=await import('/settings.js');settings.applyTheme('dark')})()");
-    await capture('chat-dark.png');
+    await settlePanels();
     await evaluate("(async()=>{const settings=await import('/settings.js');settings.applyTheme('light')})()");
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
     await wait("document.getElementById('conversationSidebar').hidden && document.getElementById('explainSection').hidden");
     assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth"), true);
-    await capture('chat-mobile.png');
     await evaluate("click('historyBtn')");
     assert.equal(await evaluate("document.getElementById('chatMain').inert"), true);
     assert.equal(await evaluate("document.getElementById('explainSection').hidden"), true);
-    await capture('chat-mobile-sessions.png');
+    await settlePanels();
     await evaluate("click('sidebarCloseBtn');click('aiPanelBtn')");
     assert.equal(await evaluate("document.getElementById('conversationSidebar').hidden"), true);
-    await capture('chat-mobile-ai.png');
+    await settlePanels();
     await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
     assert.equal(await evaluate("document.getElementById('chatMain').inert"), false);
     assert.equal(await evaluate("document.activeElement.id"), 'aiPanelBtn');
-    console.log('PASS desktop expansion, dark theme, narrow drawers and no horizontal overflow; screenshots saved');
+    console.log('PASS desktop expansion, dark theme, narrow drawers and no horizontal overflow');
     stallCatalog=true;
     await evaluate("document.body.dataset.ready='reloading'");
     await send('Page.reload');

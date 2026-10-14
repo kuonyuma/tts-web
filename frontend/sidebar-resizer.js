@@ -4,18 +4,18 @@
  * with bounded constraints, keyboard accessibility, double-click reset, and localStorage persistence.
  */
 
-export const DEFAULT_LEFT_WIDTH = 250;
+const DEFAULT_LEFT_WIDTH = 250;
 export const MIN_LEFT_WIDTH = 180;
 export const MAX_LEFT_WIDTH = 480;
 
-export const DEFAULT_RIGHT_WIDTH = 345;
+const DEFAULT_RIGHT_WIDTH = 345;
 export const MIN_RIGHT_WIDTH = 260;
-export const MAX_RIGHT_WIDTH = 600;
+const MAX_RIGHT_WIDTH = 600;
 
-export const MIN_CENTER_WIDTH = 360;
+const MIN_CENTER_WIDTH = 360;
 
-export const LEFT_STORAGE_KEY = 'tts_sidebar_left_width';
-export const RIGHT_STORAGE_KEY = 'tts_sidebar_right_width';
+const LEFT_STORAGE_KEY = 'tts_sidebar_left_width';
+const RIGHT_STORAGE_KEY = 'tts_sidebar_right_width';
 
 const narrow = window.matchMedia('(max-width: 1100px)');
 
@@ -37,7 +37,7 @@ let rightWidth = readSavedWidth(RIGHT_STORAGE_KEY, DEFAULT_RIGHT_WIDTH, MIN_RIGH
 let isLeftOpenFn = () => true;
 let isRightOpenFn = () => true;
 
-export function applyWidths() {
+function applyWidths() {
   document.documentElement.style.setProperty('--sidebar-left-width', `${leftWidth}px`);
   document.documentElement.style.setProperty('--sidebar-right-width', `${rightWidth}px`);
   if (document.body) {
@@ -56,7 +56,7 @@ export function applyWidths() {
   }
 }
 
-export function setSidebarWidth(side, width, save = true) {
+function setSidebarWidth(side, width, save = true) {
   const shell = document.querySelector('.chat-shell');
   const shellWidth = shell ? shell.clientWidth : window.innerWidth;
 
@@ -79,7 +79,7 @@ export function setSidebarWidth(side, width, save = true) {
   return side === 'left' ? leftWidth : rightWidth;
 }
 
-export function resetSidebarWidth(side) {
+function resetSidebarWidth(side) {
   const defaultWidth = side === 'left' ? DEFAULT_LEFT_WIDTH : DEFAULT_RIGHT_WIDTH;
   return setSidebarWidth(side, defaultWidth, true);
 }

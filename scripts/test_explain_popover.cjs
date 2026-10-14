@@ -1,11 +1,7 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const http = require('node:http');
 const { serveFrontend } = require('./frontend_test_server.cjs');
 const { launchBrowser, delay } = require('./browser_test_helper.cjs');
-
-const root = path.resolve(__dirname, '..');
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -110,19 +106,11 @@ let browser;
     // 验证控件的值已正确加载
     const modelValue = await evaluate("document.getElementById('explainModelSelect').value");
     assert.equal(modelValue, 'deepseek-flash', '默认模型应正确选中');
+    console.log('PASS AI 解说设置弹出面板展开成功');
 
-    // 5. 截图查看展开状态的精致外观
-    const screenshotDir = path.join(root, 'docs/screenshots');
-    fs.mkdirSync(screenshotDir, { recursive: true });
-    const screenshotResult = await send('Page.captureScreenshot', { format: 'png' });
-    fs.writeFileSync(path.join(screenshotDir, 'ai-popover-open.png'), Buffer.from(screenshotResult.data, 'base64'));
-    console.log('PASS AI 解说设置弹出面板展开成功，截图已保存为 docs/screenshots/ai-popover-open.png');
-
-    // 截取暗色模式下的效果
+    // 验证暗色模式切换下弹层保持正常展示
     await evaluate("document.documentElement.setAttribute('data-theme', 'dark'); document.body.setAttribute('data-theme', 'dark');");
     await delay(100);
-    const darkScreenshot = await send('Page.captureScreenshot', { format: 'png' });
-    fs.writeFileSync(path.join(screenshotDir, 'ai-popover-dark.png'), Buffer.from(darkScreenshot.data, 'base64'));
     await evaluate("document.documentElement.setAttribute('data-theme', 'light'); document.body.setAttribute('data-theme', 'light');");
     await delay(50);
 

@@ -4,13 +4,11 @@
  * Modular architecture:
  * - theme.css: Light/dark design tokens and scrollbars
  * - layout.css: Base layout, settings modal, responsive rules
- * - copilot.css: Explanation messages, markdown formatting, suggestions
- * - chat.css (loaded by index.html): Conversation layout, sidebars, message player
+ * - chat.css (loaded by index.html): Conversation layout, sidebars, message player, Copilot UI
  */
 
 @import "./theme.css";
 @import "./layout.css";
-@import "./copilot.css";
 
 /* Base typography declaration */
 :root {

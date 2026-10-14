@@ -6,7 +6,7 @@ const statusNames = { pending: '等待保存', saving: '保存中…', saved: '�
 const dateLabel = value => new Date(value).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' });
 
 /** Plain text only, with strict UTF-8 decoding and no newline normalization. */
-export async function readArticleFile(file) {
+async function readArticleFile(file) {
   if (!/\.(txt|md)$/i.test(file.name)) throw new Error(`${file.name}：只支持 .txt 和 .md 文件。`);
   if (file.size > 2 * 1024 * 1024) throw new Error(`${file.name}：文件超过 2 MiB，请拆分后导入。`);
   let content;
@@ -133,11 +133,9 @@ export class ArticleViews {
       <div class="article-selection-bar"><button class="article-fill" disabled>选中文字 → 语音输入</button><small>填入后，由你点击发送</small></div>`;
     const title = node.querySelector('.article-title-input');
     title.value = entry.title;
-    for (const [input, field] of [[title, 'title']]) {
-      input.addEventListener('compositionstart', () => this.state.edit(entry.id, { [field]: input.value }, true));
-      input.addEventListener('input', event => this.state.edit(entry.id, { [field]: input.value }, event.isComposing));
-      input.addEventListener('compositionend', () => this.state.edit(entry.id, { [field]: input.value }));
-    }
+    title.addEventListener('compositionstart', () => this.state.edit(entry.id, { title: title.value }, true));
+    title.addEventListener('input', event => this.state.edit(entry.id, { title: title.value }, event.isComposing));
+    title.addEventListener('compositionend', () => this.state.edit(entry.id, { title: title.value }));
     node.querySelector('.article-back').addEventListener('click', this.activateLibrary);
     node.querySelector('.article-mode-read').addEventListener('click', () => { this.setMode(entry.id, 'read'); this.run(() => this.state.flush(entry.id)); });
     node.querySelector('.article-mode-edit').addEventListener('click', () => this.setMode(entry.id, 'edit'));

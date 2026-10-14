@@ -91,7 +91,7 @@ async def explain_sentence(
         try:
             await reserve_copilot_quota(x_client_id, mode.quota_weight)
             result, model_id, mode_id, revision = await generate_explanation_text(
-                text=request.text, lang=request.lang, model_id=profile.id, mode_id=mode.id, selection=selection,
+                text=request.text, lang=request.lang, selection=selection,
             )
             await run_in_threadpool(
                 save_explanation,
@@ -183,8 +183,6 @@ async def chat_about_sentence(
             lang=stored["lang"],
             messages=messages,
             new_message=request.message,
-            model_id=stored["model_id"],
-            mode_id=mode.id,
             selection=(profile, mode),
         )
         updated = await run_in_threadpool(

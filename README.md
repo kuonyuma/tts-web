@@ -1,10 +1,6 @@
 # TTS Web (v0.2) 🎙️
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="docs/i18n/README_zh.md">简体中文</a>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/Python-3.13+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/Package%20Manager-uv-DE5FE9?style=flat-square" alt="uv" />
@@ -18,21 +14,20 @@ It provides an out-of-the-box dual-engine architecture: completely free and keyl
 
 AI Reading Copilot is a separate, server-funded multi-model feature. Its browser model and
 model-specific reasoning selectors are driven by a backend allowlist; browser-supplied LLM keys are
-never accepted. See [COPILOT_DEPLOYMENT.md](docs/deployment/COPILOT_DEPLOYMENT.md) before enabling it publicly.
+never accepted.
 
 Open `/account.html` to register, log in, verify an email, reset a password or manage
 an account. Authentication uses Argon2id passwords, JWT-backed revocable sessions,
 HttpOnly cookies and CSRF protection. GitHub OAuth and SMTP email are configurable.
 Ordinary users and administrators have separate server-enforced permissions.
 Local mode remains available; enable `ACCOUNT_AUTH_REQUIRED=true` with private TTS
-storage for account-only access. See [Authentication setup](docs/development/AUTHENTICATION.md)
-for configuration, admin bootstrap, API and data ownership.
+storage for account-only access.
 
 ---
 
 ## ✨ Key Features
 
-- **Account article library and tabbed reading workspace**: Save long plain-text articles to your login account, edit with automatic saving and protected local drafts, import UTF-8 `.txt`/`.md` files, and fill selected passages into the TTS composer. The existing AI assistant occupies one workspace tab and continues to follow submitted conversation text. See [Article library guide](docs/development/ARTICLES.md).
+- **Account article library and tabbed reading workspace**: Save long plain-text articles to your login account, edit with automatic saving and protected local drafts, import UTF-8 `.txt`/`.md` files, and fill selected passages into the TTS composer. The existing AI assistant occupies one workspace tab and continues to follow submitted conversation text.
 - 🎙️ **Dual-Engine & Multi-Voice Support**:
   - **Edge TTS (Default & Free)**: Zero configuration, no API key required. Built-in neural voices (Japanese: Nanami / Keita; Chinese: Xiaoxiao / Yunxi; English: Ava / Andrew).
   - **Gemini TTS (High Fidelity & BYOK)**: Powered by Google Gemini 3.8 Flash (`gemini-3.8-flash-tts`), offering 8 expressive natural voices (`Kore`, `Aoede`, `Leda`, `Zephyr`, `Puck`, `Charon`, `Fenrir`, `Orus`). The Interactions API explicitly requests 24 kHz PCM for MP3 conversion. Override `GEMINI_TTS_MODEL` in `.env` to use another compatible model.
@@ -90,8 +85,6 @@ for configuration, admin bootstrap, API and data ownership.
 ```
 
 ---
-
-For public deployment, limits and recovery, read [Stable release deployment](docs/releases/STABLE_RELEASE.md).
 
 ## 🚀 Quick Start
 

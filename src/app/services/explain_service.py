@@ -155,7 +155,7 @@ async def generate_chat_answer(
     lang: str,
     messages: list[dict],
     new_message: str,
-    model_id: str,
+    model_id: str | None = None,
     mode_id: str | None = None,
     *, selection: tuple[ModelProfile, ReasoningPreset] | None = None,
 ) -> tuple[LLMResult, str, str, str]:

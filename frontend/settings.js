@@ -54,11 +54,11 @@ let callbacks = {
   onLimitsLoaded: () => {},
 };
 
-export function getEngineById(engineId = engineSelect?.value) {
+function getEngineById(engineId = engineSelect?.value) {
   return availableEngines.find((engine) => engine.id === engineId) || null;
 }
 
-export function getEngineLabel(engineId, fallback = "语音引擎") {
+function getEngineLabel(engineId, fallback = "语音引擎") {
   return ENGINE_LABELS[engineId] || fallback;
 }
 
@@ -82,7 +82,7 @@ export function getMinCharCount() {
   return minCharCount;
 }
 
-export function updateEngineMeta() {
+function updateEngineMeta() {
   const engine = getEngineById();
   if (engineBadge) {
     engineBadge.textContent = engine?.is_free ? "免费" : "高品质";
@@ -90,7 +90,7 @@ export function updateEngineMeta() {
   }
 }
 
-export function renderEngineSelect() {
+function renderEngineSelect() {
   if (!engineSelect) return;
   const savedEngine = localStorage.getItem("tts_selected_engine") || "edge";
 
@@ -108,7 +108,7 @@ export function renderEngineSelect() {
   updateEngineMeta();
 }
 
-export function renderVoicesForCurrentEngine() {
+function renderVoicesForCurrentEngine() {
   if (!voiceSelect) return;
   const currentEngineId = engineSelect.value;
   const engineObj = availableEngines.find((e) => e.id === currentEngineId);
@@ -206,11 +206,11 @@ export function applyTheme(themeId) {
   }
 }
 
-export function getCurrentTheme() {
+function getCurrentTheme() {
   return localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME;
 }
 
-export function initThemeSelector() {
+function initThemeSelector() {
   const rawTheme = localStorage.getItem(THEME_STORAGE_KEY);
   // Migrate legacy daytime themes to "light"
   const savedTheme = rawTheme === "dark" ? "dark" : DEFAULT_THEME;
@@ -254,7 +254,7 @@ function initMotionSelector() {
 
 // ── BYOK API Key Modal & Management ──────────────────────────────
 
-export function updateKeyBadge() {
+function updateKeyBadge() {
   const key = localStorage.getItem("tts_gemini_api_key");
   if (keyStatusBadge) {
     keyStatusBadge.style.display = key && key.trim() ? "inline-block" : "none";
@@ -269,7 +269,7 @@ export function isSettingsModalOpen() {
   return Boolean(settingsModal && settingsModal.style.display !== "none");
 }
 
-export function openSettingsModal() {
+function openSettingsModal() {
   if (!settingsModal) return;
   const storedKey = getApiKey();
   if (geminiApiKeyInput) {
