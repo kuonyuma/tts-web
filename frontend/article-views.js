@@ -1,6 +1,7 @@
 import { escapeHtml } from './api.js';
 import { renderArticleBlocks } from './article-markdown.js';
 import { ArticleEditor } from './article-editor.js';
+import { ArticleReaderController, segmentArticlePreview, highlightSavedWordsInPreview } from './article-reader.js';
 
 const statusNames = { pending: '等待保存', saving: '保存中…', saved: '已保存', error: '保存失败', conflict: '版本冲突 · 草稿已保留' };
 const dateLabel = value => new Date(value).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' });
@@ -19,13 +20,20 @@ async function readArticleFile(file) {
 }
 
 export class ArticleViews {
-  constructor({ state, library, editors, open, activateLibrary, fillInput, notify, onViewChange = () => {} }) {
-    Object.assign(this, { state, library, editors, open, activateLibrary, fillInput, notify, onViewChange });
+  constructor({ state, library, editors, open, activateLibrary, fillInput, notify, onViewChange = () => {}, vocabStore = null, wordPopover = null, explainSentence = null }) {
+    Object.assign(this, { state, library, editors, open, activateLibrary, fillInput, notify, onViewChange, vocabStore, wordPopover, explainSentence });
     this.nodes = new Map();
     this.rows = [];
     this.searchVersion = 0;
     this.selectionChanged = () => this.updateSelections();
     document.addEventListener('selectionchange', this.selectionChanged);
+    this.unsubVocab = this.vocabStore?.subscribe(() => {
+      for (const node of this.nodes.values()) {
+        if (node.articleView.mode === 'read') {
+          highlightSavedWordsInPreview(node.querySelector('.article-preview'), this.vocabStore?.items || []);
+        }
+      }
+    });
     this.renderLibrary();
   }
   run(action) { Promise.resolve().then(action).catch(error => { if (this.state?.alive) this.notify(error.message); }); }
@@ -130,7 +138,7 @@ export class ArticleViews {
       <div class="article-mode-switch" role="group" aria-label="文章视图"><button class="article-mode-read" type="button">阅读</button><button class="article-mode-live" type="button">实时预览</button><button class="article-mode-edit" type="button">编辑源码</button></div>
       <div id="body-${entry.id}" class="article-body article-code-editor" aria-label="文章 Markdown 编辑器"></div>
       <div class="article-preview" tabindex="0" role="document" aria-label="文章阅读正文"></div>
-      <div class="article-selection-bar"><button class="article-fill" disabled>选中文字 → 语音输入</button><small>填入后，由你点击发送</small></div>`;
+      <div class="article-selection-bar"><div class="article-selection-actions"><button class="article-fill" disabled>选中文字 → 语音输入</button><button class="article-vocab-lookup-btn" type="button" disabled>★ 查词 / 收藏生词</button></div><small>填入后，由你点击发送 · 阅读视图支持点句朗读与划词查词</small></div>`;
     const title = node.querySelector('.article-title-input');
     title.value = entry.title;
     title.addEventListener('compositionstart', () => this.state.edit(entry.id, { title: title.value }, true));
@@ -148,7 +156,15 @@ export class ArticleViews {
       if (confirm('用本地草稿覆盖刚读取的服务器版本？另一设备的修改可能会被替换。')) this.run(() => this.state.resolve(entry.id, 'local'));
     });
     const fill = node.querySelector('.article-fill');
-    const updateSelection = () => { fill.disabled = !this.selectedText(node); };
+    const vocabLookupBtn = node.querySelector('.article-vocab-lookup-btn');
+    const updateSelection = () => {
+      const sel = this.selectedText(node);
+      fill.disabled = !sel;
+      if (vocabLookupBtn) {
+        const trimmed = (sel || '').trim();
+        vocabLookupBtn.disabled = !trimmed || Array.from(trimmed).length > 80;
+      }
+    };
     node.articleEditor = new ArticleEditor(node.querySelector('.article-code-editor'), {
       content: entry.content, selection: node.articleView.selection,
       onInput: (content, composing) => this.state.edit(entry.id, { content }, composing),
@@ -158,12 +174,56 @@ export class ArticleViews {
       },
       onScroll: () => { this.captureViewState(entry.id); this.onViewChange(); },
     });
+    node.articleReader = new ArticleReaderController(node, {
+      entryId: entry.id,
+      fillInput: this.fillInput,
+      onExplainSentence: sentenceText => this.explainSentence?.(sentenceText, entry.id),
+      onOpenVocabCard: opts => {
+        const currentEntry = this.state.entries.get(entry.id) || entry;
+        this.wordPopover?.open({
+          ...opts,
+          articleId: entry.id,
+          articleTitle: currentEntry.title || '未命名文章',
+        });
+      },
+      notify: this.notify,
+    });
     fill.addEventListener('pointerdown', event => event.preventDefault());
     fill.addEventListener('click', () => {
       const text = this.selectedText(node);
       if (!text) { this.notify('请先在文章正文中选中文字。'); return; }
       this.fillInput(text);
     });
+    if (vocabLookupBtn) {
+      vocabLookupBtn.addEventListener('pointerdown', event => event.preventDefault());
+      vocabLookupBtn.addEventListener('click', () => {
+        const text = this.selectedText(node)?.trim();
+        if (!text) { this.notify('请先在文章中选中要查询或收藏的词条。'); return; }
+        let sentence = '';
+        let anchorRect = vocabLookupBtn.getBoundingClientRect();
+        if (node.articleView.mode === 'read') {
+          const sel = window.getSelection();
+          if (sel?.rangeCount && !sel.isCollapsed) {
+            const range = sel.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            if (rect.width || rect.height) anchorRect = rect;
+            const startEl = range.startContainer.nodeType === Node.ELEMENT_NODE
+              ? range.startContainer
+              : range.startContainer.parentElement;
+            const sentenceEl = startEl?.closest('.article-sentence');
+            if (sentenceEl) sentence = sentenceEl.textContent.trim();
+          }
+        }
+        const currentEntry = this.state.entries.get(entry.id) || entry;
+        this.wordPopover?.open({
+          word: text,
+          sentence,
+          articleId: entry.id,
+          articleTitle: currentEntry.title || '未命名文章',
+          anchorRect,
+        });
+      });
+    }
     this.nodes.set(entry.id, node); this.editors.appendChild(node);
     for (const viewport of node.querySelectorAll('.article-preview')) {
       viewport.addEventListener('scroll', () => { this.captureViewState(entry.id); this.onViewChange(); }, { passive: true });
@@ -182,7 +242,15 @@ export class ArticleViews {
     return preview.contains(range.startContainer) && preview.contains(range.endContainer) ? selection.toString() : '';
   }
   updateSelections() {
-    for (const node of this.nodes.values()) node.querySelector('.article-fill').disabled = !this.selectedText(node);
+    for (const node of this.nodes.values()) {
+      const sel = this.selectedText(node);
+      node.querySelector('.article-fill').disabled = !sel;
+      const lookupBtn = node.querySelector('.article-vocab-lookup-btn');
+      if (lookupBtn) {
+        const trimmed = (sel || '').trim();
+        lookupBtn.disabled = !trimmed || Array.from(trimmed).length > 80;
+      }
+    }
   }
   captureViewState(id) {
     const node = this.nodes.get(id);
@@ -210,9 +278,17 @@ export class ArticleViews {
   renderPreview(node) {
     const entry = this.state.entries.get(node.id.slice('article-panel-'.length));
     if (!entry || node.articleView.renderedText === entry.content) return;
-    node.querySelector('.article-preview').innerHTML = entry.content
+    const preview = node.querySelector('.article-preview');
+    preview.innerHTML = entry.content
       ? renderArticleBlocks(entry.content).map(block => `<div class="article-reading-block" data-source-start="${block.start}" data-source-end="${block.end}">${block.html}</div>`).join('')
       : '<p class="article-reading-empty">还没有正文，点击“实时预览”开始写作。</p>';
+    if (entry.content) {
+      const sentences = segmentArticlePreview(preview);
+      highlightSavedWordsInPreview(preview, this.vocabStore?.items || []);
+      node.articleReader?.setSentences(sentences);
+    } else {
+      node.articleReader?.setSentences([]);
+    }
     node.articleView.renderedText = entry.content;
     this.updateSelections();
   }
@@ -225,6 +301,7 @@ export class ArticleViews {
     node.querySelector('.article-mode-live').setAttribute('aria-pressed', String(live));
     node.querySelector('.article-mode-edit').setAttribute('aria-pressed', String(!reading && !live));
     node.articleEditor.setMode(live ? 'live' : 'edit');
+    node.articleReader?.setModeVisible(reading);
     if (reading) this.renderPreview(node);
   }
   setMode(id, mode) {
@@ -270,6 +347,7 @@ export class ArticleViews {
     }
     if (entry.removed) {
       this.searchVersion++;
+      this.nodes.get(entry.id)?.articleReader?.dispose();
       this.nodes.get(entry.id)?.articleEditor.dispose();
       this.nodes.get(entry.id)?.remove(); this.nodes.delete(entry.id);
       this.rows = this.rows.filter(row => row.id !== entry.id); this.renderRows(); return;
@@ -305,7 +383,11 @@ export class ArticleViews {
   }
   dispose() {
     clearTimeout(this.searchTimer); document.removeEventListener('selectionchange', this.selectionChanged);
-    for (const node of this.nodes.values()) node.articleEditor.dispose();
+    this.unsubVocab?.();
+    for (const node of this.nodes.values()) {
+      node.articleReader?.dispose();
+      node.articleEditor.dispose();
+    }
     this.nodes.clear(); this.editors.replaceChildren(); this.library.replaceChildren();
   }
 }

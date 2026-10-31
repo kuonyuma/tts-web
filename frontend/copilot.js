@@ -79,6 +79,15 @@ export function getCurrentExplainKey() {
   return currentExplainKey;
 }
 
+export function getExplainConfig() {
+  return {
+    lang: explainLang || "zh",
+    model: explainModel || null,
+    mode: explainThinking || null,
+    available: Boolean(explainModel),
+  };
+}
+
 function clearExplainSession() {
   invalidateExplainSession();
   currentExplainKey = null;

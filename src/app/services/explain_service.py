@@ -142,6 +142,101 @@ def build_chat_messages(
     return result
 
 
+def build_word_lookup_key(
+    word: str, sentence: str, lang: str,
+    model_id: str | None = None, mode_id: str | None = None,
+    *, selection: tuple[ModelProfile, ReasoningPreset] | None = None,
+) -> str:
+    profile, mode = selection or resolve_selection(model_id, mode_id)
+    material = json.dumps(
+        {
+            "kind": "word_lookup_v1",
+            "word": word.strip(),
+            "sentence": (sentence or "").strip(),
+            "lang": _check_lang(lang),
+            "model_id": profile.id,
+            "upstream_model": profile.upstream_model,
+            "mode_id": mode.id,
+            "profile_revision": profile.profile_revision,
+            "prompt_version": settings.COPILOT_PROMPT_VERSION,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+_WORD_LOOKUP_PROMPTS = {
+    "zh": (
+        "请针对用户选中的词条（及所在原句语境）输出紧凑的 JSON 对象，不要包含代码块标记或任何额外文字。"
+        "字段固定为：word（词条原型或标准写法）、reading（假名读音或音标，若纯假名/英文可填发音提示）、"
+        "pos（词性，如 名詞・サ変 / 五段動詞 / n. / v.）、meaning（用简体中文给出在本句中的精准释义）、"
+        "note（用简体中文简短说明词形变化或固定搭配，25字以内）。"
+    ),
+    "ja": (
+        "選択された語句（および文脈）について、余計な説明やコードブロックなしで JSON オブジェクトのみを出力してください。"
+        "キーは word（基本形）、reading（読み仮名・発音）、pos（品詞）、meaning（文脈に即した簡潔な意味）、"
+        "note（活用形や用法の短い補足）としてください。"
+    ),
+    "en": (
+        "For the selected word/phrase (and its context sentence), output ONLY a compact JSON object without code fences. "
+        "Required keys: word (dictionary/base form), reading (kana reading or pronunciation), "
+        "pos (part of speech, e.g., n., v., adj.), meaning (concise meaning in this context in English), "
+        "note (brief inflection or usage note under 20 words)."
+    ),
+}
+
+
+def build_word_lookup_messages(word: str, sentence: str, lang: str) -> list[dict[str, str]]:
+    language = _check_lang(lang)
+    system = f"{_SYSTEM_PROMPTS[language]} {_WORD_LOOKUP_PROMPTS[language]} {_OUTPUT_RULES[language]}"
+    context_line = f"\n所在原句：{sentence.strip()}" if sentence and sentence.strip() else ""
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": f"选中词条：{word.strip()}{context_line}"},
+    ]
+
+
+def parse_word_lookup_payload(raw_text: str, fallback_word: str) -> dict[str, str]:
+    cleaned = (raw_text or "").strip()
+    if cleaned.startswith("```"):
+        lines = [line for line in cleaned.splitlines() if not line.strip().startswith("```")]
+        cleaned = "\n".join(lines).strip()
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end > start:
+        try:
+            obj = json.loads(cleaned[start:end + 1])
+            if isinstance(obj, dict):
+                return {
+                    "word": str(obj.get("word") or fallback_word).strip()[:100] or fallback_word,
+                    "reading": str(obj.get("reading") or "").strip()[:120],
+                    "pos": str(obj.get("pos") or "").strip()[:60],
+                    "meaning": str(obj.get("meaning") or "").strip()[:1000] or cleaned[:300],
+                    "note": str(obj.get("note") or "").strip()[:1000],
+                }
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return {
+        "word": fallback_word,
+        "reading": "",
+        "pos": "",
+        "meaning": cleaned[:600] if cleaned else fallback_word,
+        "note": "",
+    }
+
+
+async def generate_word_lookup(
+    word: str, sentence: str, lang: str,
+    model_id: str | None = None, mode_id: str | None = None,
+    *, selection: tuple[ModelProfile, ReasoningPreset] | None = None,
+) -> tuple[LLMResult, str, str, str]:
+    profile, mode = selection or resolve_selection(model_id, mode_id)
+    return await complete(profile, mode, build_word_lookup_messages(word, sentence, lang))
+
+
+
 async def generate_explanation_text(
     text: str, lang: str, model_id: str | None = None, mode_id: str | None = None,
     *, selection: tuple[ModelProfile, ReasoningPreset] | None = None,
@@ -394,6 +489,8 @@ def clear_explanations(client_id: str) -> int:
 
 __all__ = [
     "SUPPORTED_LANGS", "build_explain_key", "build_explain_messages", "build_chat_messages",
-    "generate_explanation_text", "generate_chat_answer", "get_explanation", "save_explanation",
+    "build_word_lookup_key", "build_word_lookup_messages", "parse_word_lookup_payload",
+    "generate_explanation_text", "generate_chat_answer", "generate_word_lookup",
+    "get_explanation", "save_explanation",
     "append_chat_messages", "release_storage_slot", "reserve_storage_slot", "resolve_selection", "delete_explanation", "clear_explanations",
 ]

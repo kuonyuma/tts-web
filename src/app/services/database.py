@@ -14,6 +14,7 @@ from app.services.article_migrations import migrate_articles
 from app.services.explanation_migrations import migrate_explanations
 from app.services.history_migrations import migrate_history
 from app.services.user_migrations import migrate_users
+from app.services.vocab_migrations import migrate_vocab
 
 DB_PATH = Path(__file__).resolve().parent.parent / "cache" / "history.db"
 _initialized = False
@@ -48,6 +49,7 @@ def init_db() -> None:
             conn.execute("begin immediate")
             migrate_users(conn)
             migrate_articles(conn)
+            migrate_vocab(conn)
             migrate_history(conn)
             migrate_explanations(conn)
             conn.commit()

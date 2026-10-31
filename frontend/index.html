@@ -14,7 +14,7 @@
 <body class="chat-app">
   <div class="chat-shell">
     <aside id="conversationSidebar" class="conversation-sidebar" aria-label="会话列表">
-      <div class="brand-row"><div class="brand-header"><a class="brand" href="./" aria-label="KOTO 语音会话"><span class="brand-mark">言</span><span class="brand-text">KOTO<small>让文字有声音</small></span></a><button id="newConversationBtn" class="new-conversation new-conversation-mini" aria-label="新建会话" title="新建会话">＋</button></div><button id="sidebarCloseBtn" class="icon-button" aria-label="收起会话栏" title="收起会话栏">‹</button></div>
+      <div class="brand-row"><div class="brand-header"><a class="brand" href="./" aria-label="KOTO 语音会话"><span class="brand-mark">言</span><span class="brand-text">KOTO<small>让文字有声音</small></span></a><button id="newConversationBtn" class="new-conversation new-conversation-mini" aria-label="新建会话" title="新建会话">＋</button></div><button id="sidebarCloseBtn" class="icon-button" aria-label="收起会话栏" title="收起会话栏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button></div>
 
       <div class="list-caption">你的会话 <span id="conversationCount">0</span></div>
       <nav id="conversationList" class="conversation-list" aria-label="选择会话"></nav>
@@ -23,9 +23,12 @@
     </aside>
     <main id="chatMain" class="chat-main">
       <header class="chat-header">
-        <button id="historyBtn" class="icon-button" aria-controls="conversationSidebar" aria-expanded="true" aria-label="展开或收起会话栏" title="会话列表">☰</button>
+        <div class="header-left-controls">
+          <button id="historyBtn" class="icon-button" aria-controls="conversationSidebar" aria-expanded="true" aria-label="展开或收起会话栏" title="展开或收起会话列表"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg></button>
+          <button id="headerNewChatBtn" class="icon-button header-new-chat-btn" type="button" aria-label="新建会话" title="新建会话" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+        </div>
         <div class="chat-heading"><h1 id="conversationTitle">新会话</h1><span>文字转语音 · TTS</span></div>
-        <div class="header-actions"><a id="accountButton" class="quiet-button account-button" href="account.html">登录 / 注册</a><button id="settingsBtn" class="quiet-button" aria-label="打开设置" title="打开设置"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span>设置</span><span id="keyStatusBadge" style="display:none"> · Key</span></button><button id="aiPanelBtn" class="panel-button" aria-controls="explainSection" aria-expanded="true" aria-label="展开或收起阅读工作台">阅读工作台</button></div>
+        <div class="header-actions"><a id="accountButton" class="quiet-button account-button" href="account.html">登录 / 注册</a><button id="settingsBtn" class="quiet-button" aria-label="打开设置" title="打开设置"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2 2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span>设置</span><span id="keyStatusBadge" style="display:none"> · Key</span></button><button id="aiPanelBtn" class="panel-button" aria-controls="explainSection" aria-expanded="true" aria-label="展开或收起阅读工作台">阅读工作台</button></div>
       </header>
       <div id="errorAlert" class="chat-notice" role="alert" style="display:none"><span id="errorMessage"></span><button id="migrationRetryBtn" hidden>重试导入</button><button id="errorCloseBtn" aria-label="关闭提示">×</button></div>
       <section id="messageList" class="message-list" aria-label="会话消息" tabindex="0"></section>
@@ -33,13 +36,13 @@
       <footer class="composer-area">
         <form id="composer" class="composer">
           <label class="sr-only" for="textInput">要转为语音的文本</label>
-          <textarea id="textInput" rows="3" placeholder="写下想听的文字…" spellcheck="false"></textarea>
+          <textarea id="textInput" rows="2" placeholder="写下想听的日文、中文或英文…" spellcheck="false"></textarea>
           <div class="composer-bottom"><div class="voice-controls">
-            <label><span class="sr-only">语音引擎</span><select id="engineSelect"><option value="edge">Edge TTS</option></select></label>
+            <label class="composer-select-pill"><span class="sr-only">语音引擎</span><select id="engineSelect"><option value="edge">Edge TTS</option></select></label>
             <span class="control-divider"></span>
-            <label><span class="sr-only">声音选择</span><select id="voiceSelect"><option value="ja-JP-NanamiNeural">七海 · 日语女声</option></select></label>
+            <label class="composer-select-pill"><span class="sr-only">声音选择</span><select id="voiceSelect"><option value="ja-JP-NanamiNeural">七海 · 日语女声</option></select></label>
             <span id="engineBadge" class="engine-pill">免费</span>
-          </div><button id="generateBtn" class="send-button" type="submit" aria-label="发送文本并生成语音" title="发送 · Ctrl+Enter">发送 <span>↑</span></button></div>
+          </div><button id="generateBtn" class="send-button" type="submit" aria-label="发送文本并生成语音" title="发送 · Ctrl+Enter"><span>发送</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></button></div>
         </form>
         <div class="composer-hint"><span>朗读你的原文 <span class="hint-separator">·</span> Ctrl / ⌘ + Enter 发送</span><span id="charCounter">0 / 1000 字</span></div>
       </footer>
@@ -49,14 +52,18 @@
       <header class="workspace-toolbar">
         <div class="ai-heading-title">
           <span class="ai-symbol">✧</span>
-          <div><strong>阅读工作台</strong><small>文章与 AI 助手</small></div>
+          <div><strong>阅读工作台</strong><small>文章 · 生词本 · AI 助手</small></div>
         </div>
-        <button id="aiCloseBtn" class="icon-button" aria-label="收起工作台" title="收起工作台">›</button>
+        <div class="workspace-toolbar-actions">
+          <button id="aiExpandBtn" class="icon-button workspace-expand-btn" type="button" aria-label="切换宽屏阅读模式" title="切换宽屏阅读模式 (Canvas)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg></button>
+          <button id="aiCloseBtn" class="icon-button" aria-label="收起工作台" title="收起工作台"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+        </div>
       </header>
       <div class="workspace-tabs-row"><div id="workspaceTabs" class="workspace-tabs" role="tablist" aria-label="工作台标签"></div><button id="workspaceAddBtn" class="workspace-add" aria-label="打开文章库" title="新建或打开文章">＋</button></div>
       <p id="workspaceNotice" class="workspace-notice" role="alert" hidden></p>
       <div class="workspace-content">
       <section id="articleLibrary" class="article-library workspace-panel" role="tabpanel" aria-labelledby="tab-library" hidden></section>
+      <section id="vocabWorkspace" class="vocab-workspace workspace-panel" role="tabpanel" aria-labelledby="tab-vocab" hidden></section>
       <div id="articleEditors" class="workspace-panel" hidden></div>
       <section id="aiWorkspace" class="workspace-panel" role="tabpanel" aria-labelledby="tab-ai">
       <div class="ai-context">

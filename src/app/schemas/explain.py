@@ -76,3 +76,36 @@ class ChatResponse(BaseModel):
     answer: str
     model_id: str
     mode_id: str
+
+
+class WordLookupRequest(BaseModel):
+    word: str = Field(..., min_length=1, max_length=100)
+    sentence: str = Field(default="", max_length=1000)
+    lang: ExplainLang = "zh"
+    model_id: str | None = Field(default=None, min_length=1, max_length=64)
+    mode_id: str | None = Field(default=None, min_length=1, max_length=32)
+
+    @field_validator("word")
+    @classmethod
+    def validate_word(cls, value: str) -> str:
+        return validate_text(value)
+
+    @field_validator("sentence")
+    @classmethod
+    def validate_sentence(cls, value: str) -> str:
+        checked = validate_unicode(value or "", "句子包含无效的 Unicode 字符。")
+        return checked.strip()
+
+
+class WordLookupResponse(BaseModel):
+    explain_key: str
+    word: str
+    reading: str
+    pos: str
+    meaning: str
+    note: str
+    lang: str
+    model_id: str
+    mode_id: str
+    cached: bool
+

@@ -7,7 +7,7 @@ import { initCopilot, loadCopilotModels, resetExplanation, setCurrentExplainText
   renderExplainEmpty, requestExplanation } from './copilot.js';
 import { ConversationStore } from './conversations.js';
 import { MessagePlayer } from './message-player.js';
-import { initSidebarResizers, adjustForAvailableSpace } from './sidebar-resizer.js';
+import { initSidebarResizers, adjustForAvailableSpace, toggleRightCanvasWidth, isRightCanvasExpanded } from './sidebar-resizer.js';
 import { bootstrapAccount, ACCOUNT_SCOPE_KEY } from './account-client.js';
 import { initWorkbench } from './workbench.js';
 
@@ -44,11 +44,19 @@ function followBottom(follow) {
   if (follow) $('messageList').scrollTop = $('messageList').scrollHeight;
   $('jumpToLatestBtn').hidden = nearBottom();
 }
+function autoResizeComposer() {
+  const input = $('textInput');
+  if (!input) return;
+  input.style.height = 'auto';
+  const nextHeight = Math.min(180, Math.max(46, input.scrollHeight));
+  input.style.height = `${nextHeight}px`;
+}
 function updateCounter() {
   const length = Array.from($('textInput').value.trim()).length;
   $('charCounter').textContent = `${length} / ${getMaxCharCount()} 字`;
   $('charCounter').style.color = length > getMaxCharCount() ? 'var(--error-text)' : '';
   $('generateBtn').disabled = !ready || length < getMinCharCount() || length > getMaxCharCount();
+  autoResizeComposer();
 }
 function formatTimestamp(isoString, includeSeconds = false) {
   if (!isoString) return '';
@@ -178,25 +186,37 @@ function renderMessages(blobMessageId = null, blob = null) {
       node.dataset.messageId = message.id;
       const time = new Date(message.createdAt);
       const label = Number.isFinite(time.getTime()) ? time.toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-      node.innerHTML = `<div class="message-time">你 · ${escapeHtml(label)}</div><div class="user-message">${escapeHtml(message.text)}</div><div class="audio-response"><span class="assistant-avatar" aria-hidden="true">言</span><div class="audio-card"></div></div>`;
+      node.innerHTML = `<div class="message-time">你 · ${escapeHtml(label)}</div><div class="user-message">${escapeHtml(message.text)}</div><div class="user-message-actions"><button type="button" class="msg-action-btn msg-act-explain" data-explain-msg="${escapeHtml(message.id)}" title="让 AI 助手解说这句话">✧ AI 解说</button><button type="button" class="msg-action-btn msg-act-refill" data-refill-msg="${escapeHtml(message.id)}" title="填入输入框重新编辑或换音色">✎ 重新编辑</button><button type="button" class="msg-action-btn msg-act-copy" data-copy-msg="${escapeHtml(message.id)}" title="复制文本">📋 复制</button></div><div class="audio-response"><span class="assistant-avatar" aria-hidden="true">言</span><div class="audio-card"></div></div>`;
       card = { node, signature: null, player: null };
       cards.set(message.id, card);
       list.appendChild(node);
     }
     renderAudio(conversation.id, message, card, message.id === blobMessageId ? blob : null);
   }
+  syncAITargetHighlight();
   followBottom(follow);
 }
-function bindAI(force = false) {
-  const message = activeConversation()?.messages.at(-1);
+function syncAITargetHighlight() {
+  for (const [msgId, card] of cards.entries()) {
+    const isTarget = aiTargetId === `${activeId}:${msgId}`;
+    card.node.classList.toggle('is-ai-target', isTarget);
+    card.node.querySelector('.msg-act-explain')?.classList.toggle('is-active-ai', isTarget);
+  }
+}
+function bindAI(force = false, targetMessage = null) {
+  const message = targetMessage || activeConversation()?.messages.at(-1);
   const targetId = message ? `${activeId}:${message.id}` : null;
-  if (!force && targetId === aiTargetId) return;
+  if (!force && targetId === aiTargetId) {
+    syncAITargetHighlight();
+    return;
+  }
   aiTargetId = targetId;
+  syncAITargetHighlight();
   setCurrentExplainText(message?.text || null, message ? `${activeId}_${message.id}` : null);
   $('explainChatInput').value = '';
   $('explainTarget').textContent = message?.text || '发送一段文本，开始阅读。';
   renderExplainEmpty();
-  if (message) requestExplanation(message.text);
+  if (message) requestExplanation(message.text, { manual: Boolean(targetMessage) });
 }
 function selectConversation(id) {
   if (activeId) {
@@ -300,6 +320,8 @@ function syncPanels() {
   right.setAttribute('aria-hidden', String(!rightOpen));
   $('historyBtn').setAttribute('aria-expanded', String(leftOpen));
   $('aiPanelBtn').setAttribute('aria-expanded', String(rightOpen));
+  if ($('headerNewChatBtn')) $('headerNewChatBtn').hidden = leftOpen;
+  if ($('aiExpandBtn')) $('aiExpandBtn').classList.toggle('is-expanded', isRightCanvasExpanded());
   $('sidebarBackdrop').hidden = !overlay;
   adjustForAvailableSpace();
   if (overlay && !((leftOpen ? left : right).contains(document.activeElement))) {
@@ -348,20 +370,24 @@ async function init() {
     updateCounter();
   } });
   initCopilot();
-  workbench = await initWorkbench({ account, showPanel: () => {
-    rightOpen = true;
-    if (narrow.matches) leftOpen = false;
-    else localStorage.setItem('tts_chat_right_open', '1');
-    syncPanels();
-  }, fillInput: text => {
-    if ($('textInput').value && !confirm('中间输入框已有未发送内容。用选中的文字覆盖它？')) return;
+  const fillComposerInput = (text, closeRightOnMobile = false) => {
+    if ($('textInput').value && $('textInput').value !== text && !confirm('中间输入框已有未发送内容。用选中的文字覆盖它？')) return;
     $('textInput').value = text;
     updateCounter();
     const length = Array.from(text.trim()).length;
     if (length < getMinCharCount() || length > getMaxCharCount()) showError(`请输入 ${getMinCharCount()} 至 ${getMaxCharCount()} 字。`);
     else hideError();
-    if (narrow.matches) { rightOpen = false; syncPanels(); }
+    if (closeRightOnMobile && narrow.matches) { rightOpen = false; syncPanels(); }
     $('textInput').focus();
+  };
+  workbench = await initWorkbench({ account, showPanel: () => {
+    rightOpen = true;
+    if (narrow.matches) leftOpen = false;
+    else localStorage.setItem('tts_chat_right_open', '1');
+    syncPanels();
+  }, fillInput: text => fillComposerInput(text, true), onExternalAITarget: () => {
+    aiTargetId = null;
+    syncAITargetHighlight();
   } });
   initSidebarResizers({
     isLeftOpen: () => leftOpen,
@@ -373,6 +399,11 @@ async function init() {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.isComposing) sendText(event);
   });
   $('newConversationBtn').addEventListener('click', () => safely(createConversation));
+  $('headerNewChatBtn')?.addEventListener('click', () => safely(createConversation));
+  $('aiExpandBtn')?.addEventListener('click', () => {
+    toggleRightCanvasWidth();
+    $('aiExpandBtn').classList.toggle('is-expanded', isRightCanvasExpanded());
+  });
   $('conversationList').addEventListener('click', event => {
     const remove = event.target.closest('[data-delete-id]');
     if (remove) {
@@ -392,7 +423,45 @@ async function init() {
   $('messageList').addEventListener('scroll', () => { $('jumpToLatestBtn').hidden = nearBottom(); });
   $('messageList').addEventListener('click', event => {
     const sample = event.target.closest('[data-sample]');
-    if (sample) { $('textInput').value = sample.dataset.sample; updateCounter(); $('textInput').focus(); }
+    if (sample) {
+      $('textInput').value = sample.dataset.sample;
+      updateCounter();
+      $('textInput').focus();
+      const comp = $('composer');
+      comp?.classList.add('is-highlighted');
+      setTimeout(() => comp?.classList.remove('is-highlighted'), 800);
+      return;
+    }
+    const explainBtn = event.target.closest('[data-explain-msg]');
+    if (explainBtn) {
+      const msg = activeConversation()?.messages.find(m => m.id === explainBtn.dataset.explainMsg);
+      if (msg) {
+        rightOpen = true;
+        if (narrow.matches) leftOpen = false;
+        else localStorage.setItem('tts_chat_right_open', '1');
+        syncPanels();
+        workbench?.activate('ai');
+        bindAI(true, msg);
+      }
+      return;
+    }
+    const refillBtn = event.target.closest('[data-refill-msg]');
+    if (refillBtn) {
+      const msg = activeConversation()?.messages.find(m => m.id === refillBtn.dataset.refillMsg);
+      if (msg) fillComposerInput(msg.text, false);
+      return;
+    }
+    const copyBtn = event.target.closest('[data-copy-msg]');
+    if (copyBtn) {
+      const msg = activeConversation()?.messages.find(m => m.id === copyBtn.dataset.copyMsg);
+      if (msg && navigator.clipboard) {
+        navigator.clipboard.writeText(msg.text).then(() => {
+          const orig = copyBtn.textContent;
+          copyBtn.textContent = '✓ 已复制';
+          setTimeout(() => { copyBtn.textContent = orig; }, 1400);
+        }).catch(() => {});
+      }
+    }
   });
   $('jumpToLatestBtn').addEventListener('click', () => followBottom(true));
   $('historyBtn').addEventListener('click', () => togglePanel('left'));

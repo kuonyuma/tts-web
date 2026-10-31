@@ -17,7 +17,9 @@ from app.api.history import router as history_router
 from app.api.users import router as users_router
 from app.api.auth import router as auth_router
 from app.api.articles import router as articles_router
+from app.api.vocab import router as vocab_router
 from app.services.article_service import ArticleError
+from app.services.vocab_service import VocabError
 from app.services.auth_service import AuthError, SESSION_COOKIE, CSRF_COOKIE
 from app.services.database import init_db
 from app.config import settings
@@ -148,6 +150,11 @@ async def article_failure(request, exc):
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
 
+@app.exception_handler(VocabError)
+async def vocab_failure(request, exc):
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
+
 @app.exception_handler(AuthError)
 async def auth_failure(request, exc):
     headers = {"Retry-After": "60"} if exc.status_code == 429 else None
@@ -188,6 +195,7 @@ app.include_router(history_router)
 app.include_router(users_router)
 app.include_router(auth_router)
 app.include_router(articles_router)
+app.include_router(vocab_router)
 
 # Mount frontend static files
 class FrontendFiles(StaticFiles):

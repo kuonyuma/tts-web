@@ -1,16 +1,19 @@
 /* One bounded right workspace. Every article owns its persistent editor DOM. */
-.workspace-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; gap: 8px; flex: none; }
-.workspace-toolbar strong { font-size: 13px; font-weight: 600; }
+.workspace-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px; gap: 8px; flex: none; }
+.workspace-toolbar strong { font-size: 13.5px; font-weight: 600; }
 .workspace-toolbar small { display: block; color: var(--chat-muted); font-size: 10px; }
-.workspace-tabs-row { display: flex; min-width: 0; flex: none; border-bottom: 1px solid var(--chat-line); }
-.workspace-tabs { display: flex; min-width: 0; flex: 1; overflow-x: auto; scrollbar-width: thin; padding: 0 8px; }
-.workspace-tab-group { display: flex; flex: none; align-items: center; border-bottom: 2px solid transparent; }
-.workspace-tab-group:has([aria-selected="true"]) { border-bottom-color: var(--chat-accent); background: var(--chat-tint); }
-.workspace-tab-group button, .workspace-add { border: 0; background: transparent; color: var(--chat-muted); padding: 10px 9px; white-space: nowrap; font-size: 11px; }
+.workspace-tabs-row { display: flex; align-items: center; min-width: 0; flex: none; padding: 4px 8px; gap: 4px; border-bottom: 1px solid var(--chat-line); background: var(--bg-subtle); }
+.workspace-tabs { display: flex; min-width: 0; flex: 1; overflow-x: auto; scrollbar-width: thin; gap: 4px; }
+.workspace-tab-group { display: flex; flex: none; align-items: center; border-radius: 7px; border: 1px solid transparent; transition: background-color .15s ease, border-color .15s ease; }
+.workspace-tab-group:hover { background: var(--bg-card); }
+.workspace-tab-group:has([aria-selected="true"]) { border-color: var(--chat-line); background: var(--bg-card); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+.workspace-tab-group button, .workspace-add { border: 0; background: transparent; color: var(--chat-muted); padding: 6px 10px; white-space: nowrap; font-size: 11.5px; border-radius: 6px; }
 .workspace-tab-group [role="tab"] { max-width: 148px; overflow: hidden; text-overflow: ellipsis; }
 .workspace-tab-group [aria-selected="true"] { color: var(--chat-accent); font-weight: 600; }
-.workspace-tab-group .workspace-tab-close { padding: 5px; font-size: 15px; }
-.workspace-add { flex: none; font-size: 19px; padding: 4px 12px; }
+.workspace-tab-group .workspace-tab-close { padding: 3px 6px; font-size: 13px; border-radius: 4px; }
+.workspace-tab-group .workspace-tab-close:hover { background: var(--chat-tint); color: var(--error-text); }
+.workspace-add { flex: none; font-size: 17px; padding: 3px 9px; border-radius: 7px; }
+.workspace-add:hover { background: var(--chat-tint); color: var(--chat-accent); }
 .workspace-content { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .workspace-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .workspace-content .workspace-panel[hidden], .article-save-error[hidden], .article-conflict[hidden], .workspace-notice[hidden] { display: none !important; }
@@ -74,8 +77,138 @@
 .article-preview a { color: var(--chat-accent); text-decoration: underline; text-underline-offset: 3px; }
 .article-reading-empty { color: var(--chat-muted); font-size: 12px; }
 .article-selection-bar { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.article-selection-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .article-selection-bar button { color: var(--chat-accent); }
 .article-selection-bar small { font-size: 10px; color: var(--chat-muted); }
+
+/* ── Article Reader Player Bar & Loop Controls ── */
+.article-reader-bar[hidden], .article-sentence-toolbar[hidden], .article-mini-player[hidden], .vocab-inline-popover[hidden] { display: none !important; }
+.article-reader-bar { flex: none; display: flex; flex-direction: column; gap: 7px; padding: 9px 11px; border: 1px solid var(--chat-line); border-radius: 9px; background: var(--bg-subtle); }
+.reader-bar-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.article-editor .reader-btn-play { flex: none; width: 30px; height: 30px; border-radius: 999px; border: 0; background: var(--chat-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; padding: 0; cursor: pointer; }
+.article-editor .reader-btn-play:hover { opacity: .92; color: #fff; background: var(--chat-accent); }
+.reader-nav-group { display: flex; gap: 3px; flex: none; }
+.article-editor .reader-nav-group button { padding: 4px 6px; font-size: 10px; }
+.reader-progress-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.reader-status-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 10px; color: var(--chat-muted); }
+.reader-sentence-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text-secondary); }
+.reader-time-label { flex: none; font-variant-numeric: tabular-nums; }
+.reader-progress-track { position: relative; height: 5px; border-radius: 999px; background: var(--chat-line); cursor: pointer; overflow: hidden; }
+.reader-progress-fill { height: 100%; border-radius: 999px; background: var(--chat-accent); transition: width .12s linear; }
+.reader-bar-controls { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.reader-speed-pills { display: flex; gap: 3px; }
+.article-editor .reader-speed-btn { padding: 2px 7px; font-size: 10px; border-radius: 5px; }
+.article-editor .reader-speed-btn.active, .article-editor .reader-loop-btn.active { background: var(--chat-tint); color: var(--chat-accent); border-color: var(--chat-accent); font-weight: 600; }
+.article-editor .reader-loop-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; font-size: 10px; border-radius: 6px; }
+
+/* ── Sentence Toolbar & Interactive Sentences ── */
+.article-sentence-toolbar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 6px 9px; border: 1px solid var(--chat-accent); border-radius: 8px; background: var(--chat-tint); font-size: 11px; }
+.sentence-toolbar-index { font-size: 10px; font-weight: 600; color: var(--chat-accent); margin-right: 4px; }
+.article-editor .article-sentence-toolbar button { padding: 3px 8px; font-size: 10px; border-radius: 5px; }
+.article-reading-block { transition: background-color .2s ease; border-radius: 6px; }
+.article-reading-block.is-reading-block { background: var(--chat-tint); padding: 4px 6px; margin-left: -6px; margin-right: -6px; }
+.article-sentence { border-radius: 4px; padding: 1px 2px; margin: 0 -1px; cursor: pointer; transition: background-color .15s ease, box-shadow .15s ease; }
+.article-sentence:hover { background: rgba(16, 185, 129, 0.08); }
+.article-sentence.is-selected-sentence { background: rgba(16, 185, 129, 0.14); box-shadow: inset 0 -1.5px 0 var(--chat-accent); }
+.article-sentence.is-reading-sentence { background: rgba(245, 158, 11, 0.22); font-weight: 500; }
+.article-sentence[data-loop-badge]::after { content: attr(data-loop-badge); font-size: .76em; font-weight: 600; color: var(--chat-accent); margin-left: 2px; }
+
+/* ── Floating Mini Player ── */
+.article-mini-player { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--chat-accent); background: var(--bg-card); box-shadow: var(--shadow-card); font-size: 11px; }
+.mini-status-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--text-secondary); }
+.article-editor .article-mini-player button { padding: 2px 7px; font-size: 10px; border-radius: 999px; }
+
+/* ── Inline Saved Vocabulary Highlight & Flash Animation ── */
+mark.article-vocab-highlight { background: transparent; color: inherit; border-bottom: 1.5px dotted #f59e0b; padding: 0 1px; border-radius: 3px; cursor: pointer; transition: background-color .15s ease; }
+mark.article-vocab-highlight:hover { background: rgba(245, 158, 11, 0.16); }
+mark.article-vocab-highlight::after { content: "★"; font-size: .68em; color: #f59e0b; vertical-align: super; margin-left: 1px; line-height: 1; }
+mark.article-vocab-highlight.is-mastered { border-bottom-color: var(--chat-accent); }
+mark.article-vocab-highlight.is-mastered::after { color: var(--chat-accent); }
+@keyframes vocabFlashPulse {
+  0%, 100% { background-color: transparent; }
+  20%, 60% { background-color: rgba(245, 158, 11, 0.42); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22); }
+}
+.animate-word-flash { animation: vocabFlashPulse 2.2s ease-in-out 2; border-radius: 4px; }
+
+/* ── Inline Word Lookup Popover ── */
+.vocab-inline-popover { position: fixed; z-index: 999; width: 330px; max-width: calc(100vw - 24px); background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--chat-line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18); padding: 12px 13px; display: flex; flex-direction: column; gap: 9px; font-size: 12px; }
+.vocab-inline-popover.is-mobile-sheet { left: 0; right: 0; bottom: 0; width: 100%; max-width: 100%; border-radius: 16px 16px 0 0; padding: 16px 16px 24px; }
+.vocab-popover-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.vocab-popover-title-wrap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; min-width: 0; }
+.vocab-popover-word { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.vocab-popover-reading { font-size: 11px; color: var(--chat-accent); }
+.vocab-popover-pos { font-size: 10px; color: var(--chat-muted); font-style: italic; background: var(--bg-subtle); padding: 1px 5px; border-radius: 4px; }
+.vocab-popover-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.vocab-popover-actions button { border: 1px solid var(--chat-line); background: var(--bg-subtle); color: var(--text-secondary); border-radius: 6px; padding: 3px 6px; font-size: 11px; cursor: pointer; }
+.vocab-popover-actions .vocab-pop-star.is-saved { color: #d97706; border-color: #f59e0b; background: rgba(245, 158, 11, 0.12); font-weight: 600; }
+.vocab-popover-loading { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--chat-accent); padding: 4px 0; }
+.vocab-popover-fields { display: flex; flex-direction: column; gap: 6px; }
+.vocab-field-row { display: flex; gap: 6px; }
+.vocab-field-row input, .vocab-input-meaning { width: 100%; border: 1px solid var(--chat-line); border-radius: 6px; background: var(--bg-subtle); color: var(--text-primary); padding: 5px 8px; font: inherit; font-size: 11px; }
+.vocab-input-meaning { resize: vertical; min-height: 44px; }
+.vocab-popover-note { margin: 0; font-size: 11px; color: var(--text-secondary); }
+.vocab-popover-sentence { padding: 7px 9px; border-radius: 7px; background: var(--bg-subtle); border-left: 2.5px solid var(--chat-accent); display: flex; flex-direction: column; gap: 5px; }
+.vocab-popover-sentence p { margin: 0; font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+.vocab-popover-sentence button { align-self: flex-start; border: 0; background: transparent; color: var(--chat-accent); font-size: 11px; padding: 0; cursor: pointer; }
+.vocab-popover-foot { display: flex; justify-content: flex-end; }
+.vocab-popover-foot .vocab-pop-save-btn { width: 100%; padding: 7px 10px; border-radius: 7px; font-weight: 600; cursor: pointer; }
+
+/* ── Vocabulary Workspace Tab (List & Flashcards) ── */
+.vocab-workspace { overflow-y: auto; padding: 20px 16px 18px; gap: 14px; }
+.vocab-workspace-header { display: flex; flex-direction: column; gap: 10px; flex: none; }
+.vocab-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.vocab-heading-row h2 { font-size: 20px; font-weight: 600; margin: 2px 0; }
+.vocab-mode-toggle { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--chat-line); border-radius: 8px; background: var(--bg-card); }
+.vocab-mode-toggle .vocab-mode-btn { border: 0; background: transparent; color: var(--chat-muted); padding: 4px 9px; border-radius: 6px; font-size: 11px; cursor: pointer; }
+.vocab-mode-toggle .vocab-mode-btn.active { background: var(--chat-tint); color: var(--chat-accent); font-weight: 600; }
+.vocab-filter-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.vocab-status-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.vocab-filter-pill, .vocab-export-btn { border: 1px solid var(--chat-line); border-radius: 999px; background: var(--bg-card); color: var(--text-secondary); padding: 4px 9px; font-size: 10px; cursor: pointer; }
+.vocab-filter-pill.active { background: var(--chat-tint); color: var(--chat-accent); border-color: var(--chat-accent); font-weight: 600; }
+.vocab-list { display: flex; flex-direction: column; gap: 10px; }
+.vocab-card { padding: 11px 12px; border: 1px solid var(--chat-line); border-radius: 10px; background: var(--bg-card); display: flex; flex-direction: column; gap: 6px; }
+.vocab-card.is-mastered { border-left: 3px solid var(--chat-accent); }
+.vocab-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.vocab-card-word-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; min-width: 0; }
+.vocab-card-word { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.vocab-card-reading { font-size: 11px; color: var(--chat-accent); }
+.vocab-card-pos { font-size: 10px; color: var(--chat-muted); font-style: italic; }
+.vocab-card-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.vocab-card-actions button { border: 1px solid var(--chat-line); border-radius: 6px; background: var(--bg-subtle); color: var(--text-secondary); padding: 2px 6px; font-size: 10px; cursor: pointer; }
+.vocab-card-actions .vocab-btn-master.active { color: var(--chat-accent); border-color: var(--chat-accent); background: var(--chat-tint); }
+.vocab-card-meaning { margin: 0; font-size: 12px; color: var(--text-primary); line-height: 1.5; }
+.vocab-card-note { margin: 0; font-size: 11px; color: var(--chat-muted); }
+.vocab-card-sentence { padding: 6px 8px; border-radius: 6px; background: var(--bg-subtle); font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.vocab-sentence-match { color: var(--chat-accent); font-weight: 600; }
+.vocab-btn-speak-sentence, .vocab-btn-locate { border: 0; background: transparent; color: var(--chat-accent); font-size: 10px; padding: 0; cursor: pointer; white-space: nowrap; }
+.vocab-card-source { display: flex; justify-content: flex-end; }
+
+/* ── Flashcards Stage (Read in Levels Qi Style) ── */
+.vocab-flashcard-stage { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.flashcard-meta-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--chat-muted); }
+.vocab-flashcard { min-height: 210px; padding: 22px 18px; border-radius: 12px; border: 1px solid var(--chat-line); background: var(--bg-card); box-shadow: var(--shadow-card); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; user-select: none; transition: border-color .15s ease, transform .12s ease; }
+.vocab-flashcard:hover { border-color: var(--chat-accent); }
+.flashcard-front, .flashcard-back { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.flashcard-word { font-size: 24px; font-weight: 700; color: var(--text-primary); }
+.flashcard-pos { font-size: 11px; color: var(--chat-muted); font-style: italic; }
+.flashcard-speak-btn { border: 1px solid var(--chat-line); border-radius: 999px; background: var(--bg-subtle); color: var(--text-secondary); padding: 4px 10px; font-size: 11px; cursor: pointer; margin-top: 4px; }
+.flashcard-hint { font-size: 10px; color: var(--chat-muted); margin-top: 8px; }
+.flashcard-back-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 6px; font-size: 15px; }
+.flashcard-reading { font-size: 12px; color: var(--chat-accent); }
+.flashcard-meaning { font-size: 15px; font-weight: 600; color: var(--chat-accent); margin: 4px 0; }
+.flashcard-note { font-size: 11px; color: var(--chat-muted); margin: 0; }
+.flashcard-sentence { margin: 6px 0 0; padding: 8px 10px; border-radius: 7px; background: var(--bg-subtle); font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+.flashcard-judge-row { display: flex; gap: 10px; }
+.flashcard-judge-row button { flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--chat-line); background: var(--bg-card); color: var(--text-primary); font-size: 12px; font-weight: 600; cursor: pointer; }
+.flashcard-judge-row button.article-primary { background: var(--chat-accent); color: #fff; border-color: var(--chat-accent); }
+.flashcard-judge-row button:disabled { opacity: .35; cursor: not-allowed; }
+.vocab-flashcard-done { padding: 28px 16px; border: 1px solid var(--chat-line); border-radius: 12px; background: var(--bg-card); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.flashcard-done-icon { font-size: 32px; }
+.vocab-flashcard-done h3 { margin: 0; font-size: 16px; }
+.vocab-flashcard-done p { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.flashcard-done-actions { display: flex; gap: 8px; margin-top: 6px; }
+.flashcard-done-actions button { border: 1px solid var(--chat-line); border-radius: 7px; padding: 7px 14px; font-size: 12px; cursor: pointer; background: var(--bg-card); color: var(--text-primary); }
+.flashcard-done-actions button.article-primary { background: var(--chat-accent); color: #fff; border-color: var(--chat-accent); }
 .article-save-error, .article-conflict { flex: none; font-size: 11px; padding: 9px; background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); border-radius: 7px; max-height: 190px; overflow-y: auto; }
 .article-save-error button, .article-conflict button { margin-top: 8px; }
 .article-conflict details { margin-top: 6px; }

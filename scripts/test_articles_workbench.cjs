@@ -6,8 +6,9 @@ const { launchBrowser } = require('./browser_test_helper.cjs');
 const ids = ['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222'];
 const now = '2026-10-03T10:00:00+00:00';
 const articles = new Map(ids.map((id,i)=>[id,{id,title:i?'雨の日の手紙':'東京の小さな喫茶店',content:('日本語の文章。\n次の行です。\n').repeat(70),revision:1,created_at:now,updated_at:now}]));
+const vocabItems = new Map();
 let account = {id:1,username:'reader'};
-let ttsCalls=0, explainCalls=0, failSave=false, failDelete=false;
+let ttsCalls=0, explainCalls=0, wordLookupCalls=0, failSave=false, failDelete=false;
 const wav=Buffer.alloc(44+4800);
 wav.write('RIFF',0);wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);
 wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);
@@ -22,6 +23,29 @@ const server = http.createServer(async (req,res)=>{
   if(url.pathname==='/api/engines')return json([{id:'edge',name:'Edge TTS',is_free:true,default_voice:'ja-JP-NanamiNeural',min_text_length:1,max_text_length:1000,request_timeout_seconds:30,voices:[{id:'ja-JP-NanamiNeural',name:'七海'}]}]);
   if(url.pathname==='/api/copilot/models')return json({models:[{id:'test',name:'Local mock',default:true,modes:[{id:'direct',name:'标准'}]}]});
   if(url.pathname==='/api/explain'){explainCalls++;return json({explain_key:'mock',explanation:'只解释已提交的原文。',cached:true,messages:[]});}
+  if(url.pathname==='/api/explain/word'){
+    wordLookupCalls++;
+    return json({explain_key:'wmock',word:'読書',reading:'どくしょ',pos:'名詞',meaning:'阅读、看书',note:'常用复合词',lang:'zh',model_id:'test',mode_id:'direct',cached:false});
+  }
+  if(url.pathname.startsWith('/api/vocab')){
+    if(!account)return json({detail:'login'},401);
+    let raw='';for await(const chunk of req)raw+=chunk;
+    const body=raw?JSON.parse(raw):null;
+    const vid=url.pathname.split('/')[3];
+    if(req.method==='GET'&&!vid)return json([...vocabItems.values()]);
+    if(req.method==='POST'){
+      const id='33333333-3333-4333-8333-333333333333';
+      const item={id,word:body.word,surface:body.surface||'',reading:body.reading||'',pos:body.pos||'',meaning:body.meaning||'',notes:body.notes||'',context_sentence:body.context_sentence||'',source_article_id:body.source_article_id||null,source_title:body.source_title||'',review_count:0,mastered:!!body.mastered,created_at:now,updated_at:now};
+      vocabItems.set(id,item);return json(item,201);
+    }
+    if(req.method==='PATCH'&&vid&&vocabItems.has(vid)){
+      const item=vocabItems.get(vid);
+      if(body.mastered!==undefined)item.mastered=!!body.mastered;
+      if(body.review_delta)item.review_count+=body.review_delta;
+      return json(item,200);
+    }
+    if(req.method==='DELETE'&&vid){vocabItems.delete(vid);return json(null,204);}
+  }
   if(url.pathname==='/api/tts'||url.pathname==='/api/tts/'+'c'.repeat(64)){
     if(req.method==='POST')ttsCalls++;
     res.writeHead(200,{'Content-Type':'audio/wav','X-Cache-Key':'c'.repeat(64)});return res.end(wav);
@@ -318,6 +342,63 @@ const consoleErrors=[];
     await wait(`${newStatus}==='已保存'`);
     assert.equal(articles.get(newId).content,'**hello**中文日本語完成削除候補');
     console.log('PASS failed deletion during IME preserves the document and allows saving to resume');
+
+    // Verify Read in Levels style sentence reader, loop modes, inline word lookup popover, ★ highlight & flashcards
+    await select(ids[0]);
+    await evaluate(`document.getElementById('article-panel-${ids[0]}').querySelector('.article-mode-read').click()`);
+    const sentenceCount = await evaluate(`document.getElementById('article-panel-${ids[0]}').querySelectorAll('.article-sentence').length`);
+    assert(sentenceCount > 5);
+    await evaluate(`document.getElementById('article-panel-${ids[0]}').querySelector('.article-sentence').click()`);
+    assert.equal(await evaluate(`document.getElementById('article-panel-${ids[0]}').querySelector('.article-sentence-toolbar').hidden`), false);
+    await evaluate(`document.getElementById('article-panel-${ids[0]}').querySelector('.sentence-act-loop').click()`);
+    await wait(`document.getElementById('article-panel-${ids[0]}').querySelector('.article-sentence').classList.contains('is-reading-sentence')`);
+    assert.equal(await evaluate(`document.getElementById('article-panel-${ids[0]}').querySelector('.article-sentence').getAttribute('data-loop-badge')`), ' (1/3)');
+    await evaluate(`document.getElementById('article-panel-${ids[0]}').articleReader.pause()`);
+
+    // Select '読書' in the article preview and open lookup popover
+    await evaluate(`(()=>{const node=document.getElementById('article-panel-${ids[0]}');const target=[...node.querySelectorAll('.article-sentence')].find(el=>el.textContent.includes('読書'));const textNode=target.firstChild;const start=textNode.nodeValue.indexOf('読書');const range=document.createRange();range.setStart(textNode,start);range.setEnd(textNode,start+2);const sel=getSelection();sel.removeAllRanges();sel.addRange(range);document.dispatchEvent(new Event('selectionchange'));node.querySelector('.article-vocab-lookup-btn').click();})()`);
+    await wait(`!document.querySelector('.vocab-inline-popover').hidden && document.querySelector('.vocab-input-reading')?.value==='どくしょ'`);
+    assert.equal(wordLookupCalls, 1);
+    await evaluate(`document.querySelector('.vocab-pop-save-btn').click()`);
+    await wait(`document.getElementById('article-panel-${ids[0]}').querySelectorAll('mark.article-vocab-highlight').length > 0`);
+    await evaluate(`document.querySelector('.vocab-pop-close').click()`);
+
+    // Verify Vocab tab list, IME search composition preservation & flashcard active recall flow
+    await evaluate(`document.querySelector('[data-workspace-tab="vocab"]').click()`);
+    await wait(`document.querySelectorAll('#vocabWorkspace .vocab-card').length === 1`);
+    await evaluate(`window.vocabSearchEl = document.getElementById('vocabSearchInput'); window.vocabSearchEl.focus();`);
+    await send('Input.imeSetComposition', { text: 'doku', selectionStart: 4, selectionEnd: 4 });
+    assert.equal(await evaluate(`window.vocabSearchEl === document.getElementById('vocabSearchInput')`), true, 'IME composition must not replace #vocabSearchInput DOM node');
+    await send('Input.insertText', { text: '読書' });
+    assert.equal(await evaluate(`window.vocabSearchEl === document.getElementById('vocabSearchInput')`), true);
+    assert.equal(await evaluate(`document.querySelectorAll('#vocabWorkspace .vocab-card').length`), 1);
+    await evaluate(`window.vocabSearchEl.value = ''; window.vocabSearchEl.dispatchEvent(new Event('input', { bubbles: true }))`);
+    await evaluate(`document.querySelector('#vocabWorkspace [data-vocab-mode="cards"]').click()`);
+    await wait(`!!document.querySelector('#vocabWorkspace .vocab-flashcard')`);
+    await evaluate(`document.querySelector('#vocabWorkspace .vocab-flashcard').click()`);
+    await wait(`!document.querySelector('#vocabWorkspace .flashcard-btn-know').disabled`);
+    await evaluate(`document.querySelector('#vocabWorkspace .flashcard-btn-know').click()`);
+    await wait(`!!document.querySelector('#vocabWorkspace .vocab-flashcard-done')`);
+    console.log('PASS sentence click-to-read, 3x loop mode, inline word lookup popover, ★ highlight, IME vocab search and flashcard review');
+
+    // Verify ChatGPT-style UI upgrades: Canvas expand toggle, composer auto-resize (no resize grabber), and message action bar
+    assert.equal(await evaluate("getComputedStyle(document.getElementById('textInput')).resize"), 'none');
+    await evaluate("document.getElementById('aiExpandBtn').click()");
+    assert.equal(Math.round(await evaluate("document.getElementById('explainSection').getBoundingClientRect().width")), 620);
+    await evaluate("document.getElementById('rightResizer').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}))");
+    const wideWidth = await evaluate("parseInt(document.documentElement.style.getPropertyValue('--sidebar-right-width'),10)");
+    assert(wideWidth > 600);
+    assert.equal(Math.round(await evaluate("document.getElementById('explainSection').getBoundingClientRect().width")), wideWidth);
+    await evaluate("document.getElementById('aiCloseBtn').click()");
+    await wait("document.getElementById('explainSection').hidden && Math.abs(document.getElementById('chatMain').getBoundingClientRect().right-innerWidth)<1");
+    await evaluate("document.getElementById('aiPanelBtn').click()");
+    await evaluate("document.getElementById('aiExpandBtn').click()");
+    assert.equal(Math.round(await evaluate("document.getElementById('explainSection').getBoundingClientRect().width")), 345);
+    await evaluate("document.querySelector('.msg-act-refill').click()");
+    assert.equal(await evaluate("document.getElementById('textInput').value"), selected);
+    await evaluate("document.getElementById('textInput').value='';document.getElementById('textInput').dispatchEvent(new Event('input'))");
+    console.log('PASS ChatGPT-style Canvas expand toggle, auto-growing composer and message action bar');
+
     assert.deepEqual(consoleErrors,[],'CodeMirror logs plugin and layout failures to console.error without throwing a browser exception');
     account=null;
     await evaluate("document.body.dataset.ready='reloading'");

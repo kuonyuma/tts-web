@@ -291,13 +291,13 @@ body {
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-.palette-dark .swatch-bg { background: #0f1117; }
-.palette-dark .swatch-primary { background: #818cf8; }
-.palette-dark .swatch-accent { background: #a78bfa; }
+.palette-dark .swatch-bg { background: #141716; }
+.palette-dark .swatch-primary { background: #56c2aa; }
+.palette-dark .swatch-accent { background: #1c211f; }
 
 .palette-light .swatch-bg { background: #ffffff; border: 1px solid #d1d5db; }
-.palette-light .swatch-primary { background: #0d0d0d; }
-.palette-light .swatch-accent { background: #71717a; }
+.palette-light .swatch-primary { background: #1d6b5f; }
+.palette-light .swatch-accent { background: #ebf5f2; }
 
 .theme-name {
   font-size: 0.84rem;

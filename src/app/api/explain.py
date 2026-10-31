@@ -1,3 +1,4 @@
+import json
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -11,14 +12,19 @@ from app.schemas.explain import (
     CopilotCatalogResponse,
     ExplainRequest,
     ExplainResponse,
+    WordLookupRequest,
+    WordLookupResponse,
     EXPLAIN_CONTEXT_PATTERN,
 )
 from app.services.explain_service import (
     append_chat_messages,
     build_explain_key,
+    build_word_lookup_key,
     generate_chat_answer,
     generate_explanation_text,
+    generate_word_lookup,
     get_explanation,
+    parse_word_lookup_payload,
     release_storage_slot,
     reserve_storage_slot,
     resolve_selection,
@@ -122,6 +128,92 @@ async def explain_sentence(
             "upstream_model": result.upstream_model,
             "messages": [],
         }, False)
+
+
+def _word_response(
+    key: str, fallback_word: str, stored: dict, cached: bool,
+) -> WordLookupResponse:
+    parsed = parse_word_lookup_payload(stored["explanation"], fallback_word)
+    return WordLookupResponse(
+        explain_key=key,
+        word=parsed["word"],
+        reading=parsed["reading"],
+        pos=parsed["pos"],
+        meaning=parsed["meaning"],
+        note=parsed["note"],
+        lang=stored["lang"],
+        model_id=stored["model_id"],
+        mode_id=stored["mode_id"],
+        cached=cached,
+    )
+
+
+@router.post("/explain/word", response_model=WordLookupResponse)
+async def explain_word_in_context(
+    request: WordLookupRequest,
+    x_client_id: str = Depends(require_copilot_identity),
+):
+    try:
+        profile, mode = resolve_selection(request.model_id, request.mode_id)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    selection = (profile, mode)
+    key = build_word_lookup_key(request.word, request.sentence, request.lang, selection=selection)
+    async with (
+        llm_request_deadline(),
+        cache_lock(f"explain:{x_client_id}:{key}"),
+        copilot_distributed_lock(x_client_id, key),
+    ):
+        stored = await run_in_threadpool(get_explanation, x_client_id, key)
+        if stored is not None:
+            return _word_response(key, request.word, stored, True)
+
+        token = await run_in_threadpool(
+            reserve_storage_slot,
+            x_client_id,
+            key,
+            max(60, int(settings.LLM_TIMEOUT_SECONDS) + 30),
+        )
+        if token == "":
+            stored = await run_in_threadpool(get_explanation, x_client_id, key)
+            if stored is not None:
+                return _word_response(key, request.word, stored, True)
+
+        try:
+            await reserve_copilot_quota(x_client_id, mode.quota_weight)
+            result, model_id, mode_id, revision = await generate_word_lookup(
+                word=request.word, sentence=request.sentence, lang=request.lang, selection=selection,
+            )
+            parsed = parse_word_lookup_payload(result.content, request.word)
+            serialized = json.dumps(parsed, ensure_ascii=False)
+            await run_in_threadpool(
+                save_explanation,
+                x_client_id,
+                request.word,
+                request.lang,
+                key,
+                serialized,
+                model_id=model_id,
+                provider=result.provider,
+                upstream_model=result.upstream_model,
+                mode_id=mode_id,
+                profile_revision=revision,
+                quota_units=mode.quota_weight,
+                usage=result.usage,
+                reservation_token=token,
+            )
+            token = None
+        finally:
+            if token:
+                await run_in_threadpool(release_storage_slot, token)
+
+        return _word_response(key, request.word, {
+            "explanation": serialized,
+            "lang": request.lang,
+            "model_id": model_id,
+            "mode_id": mode_id,
+        }, False)
+
 
 
 @router.get("/explain", response_model=ExplainResponse)

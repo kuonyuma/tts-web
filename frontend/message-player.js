@@ -1,6 +1,21 @@
 import { apiFetch, getClientId, handleResponseError } from './api.js';
 
 const players = new Set();
+const externalAudios = new Set();
+
+export function registerExternalAudio(audio) {
+  if (audio) externalAudios.add(audio);
+  return () => externalAudios.delete(audio);
+}
+
+export function pauseAllPlayers(exceptAudio = null) {
+  players.forEach(player => {
+    if (player.audio !== exceptAudio && !player.audio.paused) player.audio.pause();
+  });
+  externalAudios.forEach(audio => {
+    if (audio !== exceptAudio && !audio.paused) audio.pause();
+  });
+}
 
 function formatAudioTime(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -109,7 +124,7 @@ export class MessagePlayer {
     };
 
     this.audio.addEventListener('play', () => {
-      players.forEach(player => { if (player !== this) player.audio.pause(); });
+      pauseAllPlayers(this.audio);
       playIcon.style.display = 'none';
       pauseIcon.style.display = 'inline-block';
       toggleBtn.title = '暂停';

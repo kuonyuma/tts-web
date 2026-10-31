@@ -10,7 +10,8 @@ export const MAX_LEFT_WIDTH = 480;
 
 const DEFAULT_RIGHT_WIDTH = 345;
 export const MIN_RIGHT_WIDTH = 260;
-const MAX_RIGHT_WIDTH = 600;
+const MAX_RIGHT_WIDTH = 860;
+const CANVAS_EXPANDED_WIDTH = 620;
 
 const MIN_CENTER_WIDTH = 360;
 
@@ -82,6 +83,16 @@ function setSidebarWidth(side, width, save = true) {
 function resetSidebarWidth(side) {
   const defaultWidth = side === 'left' ? DEFAULT_LEFT_WIDTH : DEFAULT_RIGHT_WIDTH;
   return setSidebarWidth(side, defaultWidth, true);
+}
+
+export function isRightCanvasExpanded() {
+  return rightWidth >= 520;
+}
+
+export function toggleRightCanvasWidth() {
+  if (narrow.matches) return rightWidth;
+  const target = isRightCanvasExpanded() ? DEFAULT_RIGHT_WIDTH : CANVAS_EXPANDED_WIDTH;
+  return setSidebarWidth('right', target, true);
 }
 
 export function adjustForAvailableSpace() {

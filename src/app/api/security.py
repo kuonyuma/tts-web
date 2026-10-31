@@ -38,7 +38,7 @@ class SecurityHeaders:
                 ))
                 if settings.APP_ENV == "production":
                     headers.append((b"strict-transport-security", b"max-age=63072000; includeSubDomains; preload"))
-                if scope["path"].startswith(("/api/explain", "/api/copilot", "/api/users", "/api/auth")):
+                if scope["path"].startswith(("/api/explain", "/api/copilot", "/api/users", "/api/auth", "/api/vocab")):
                     headers.extend(((b"cache-control", b"no-store"), (b"pragma", b"no-cache")))
                 if settings.TTS_STORAGE_MODE == "private" and scope["path"].startswith(("/api/tts", "/api/history")):
                     headers = [(key, value) for key, value in headers if key.lower() != b"cache-control"]
